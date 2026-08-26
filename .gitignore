@@ -1,0 +1,38 @@
+# Private project instructions and internal build files (never commit)
+CLAUDE.md
+BUILD_PLAN.md
+BUILD_LOG.md
+BUILD_DIARY.md
+NOTES.md
+TODO.private.md
+*.private.md
+.claude/
+scratch/
+diagnostics/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+.next/
+out/
+extension/dist/
+
+# Convex local state
+.convex/
+
+# Editor and OS
+.vscode/
+.idea/
+.DS_Store
+*.log
+npm-debug.log*
+*.tsbuildinfo
