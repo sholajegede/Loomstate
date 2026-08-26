@@ -23,6 +23,7 @@ export function LiveWatches({
 }) {
   const data = useQuery(api.watches.forLoop, { loopId });
   const create = useMutation(api.watches.create);
+  const setInterval = useMutation(api.watches.setInterval);
   const checkLoop = useAction(api.watches.checkLoopNow);
   const markSeen = useMutation(api.watches.markDiffsSeen);
   const [draft, setDraft] = useState("");
@@ -102,6 +103,22 @@ export function LiveWatches({
                       {watch.availability}
                     </span>
                   ) : null}
+                  <select
+                    value={watch.intervalMinutes}
+                    onChange={(e) =>
+                      void setInterval({
+                        watchId: watch._id,
+                        intervalMinutes: Number(e.target.value),
+                      })
+                    }
+                    title="How often Loomstate re-reads this page"
+                    className="shrink-0 rounded border border-ink-800 bg-ink-900 px-1.5 py-0.5 text-[11px] text-ink-400 outline-none"
+                  >
+                    <option value={15}>15m</option>
+                    <option value={60}>1h</option>
+                    <option value={360}>6h</option>
+                    <option value={1440}>1d</option>
+                  </select>
                   <span className="w-16 shrink-0 text-right text-[11px] text-ink-400">
                     {watch.lastCrawlAt ? timeAgo(watch.lastCrawlAt) : "not read"}
                   </span>

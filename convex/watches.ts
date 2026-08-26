@@ -17,7 +17,7 @@ import { sha256Hex } from "./lib/hash";
 import { resolveFirecrawlKey, resolveOpenAiKey } from "./secrets";
 import { alivenessScore, statusFor } from "./lib/aliveness";
 
-const DEFAULT_INTERVAL_MINUTES = 60;
+const DEFAULT_INTERVAL_MINUTES = 15;
 
 const watchShape = v.object({
   _id: v.id("watches"),
@@ -161,6 +161,20 @@ export const create = mutation({
       at: now,
     });
     return watchId;
+  },
+});
+
+/** Sets how often Loomstate re-reads a watched page. */
+export const setInterval = mutation({
+  args: { watchId: v.id("watches"), intervalMinutes: v.number() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const watch = await ctx.db.get(args.watchId);
+    if (watch === null) throw new Error("Watch not found.");
+    await requireWorkspaceWrite(ctx, watch.workspaceId);
+    const minutes = Math.min(1440, Math.max(5, Math.round(args.intervalMinutes)));
+    await ctx.db.patch(args.watchId, { intervalMinutes: minutes });
+    return null;
   },
 });
 
