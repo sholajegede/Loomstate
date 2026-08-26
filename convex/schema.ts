@@ -1,4 +1,5 @@
 import { defineSchema, defineTable } from "convex/server";
+import { authTables } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
 export const loopType = v.union(
@@ -41,15 +42,22 @@ export const evidence = v.object({
 });
 
 export default defineSchema({
+  ...authTables,
+
+  // Overrides the users table from authTables. The auth fields must stay
+  // optional; Convex Auth writes only the ones a provider supplies.
   users: defineTable({
-    authSubject: v.string(),
-    email: v.optional(v.string()),
     name: v.optional(v.string()),
     image: v.optional(v.string()),
-    createdAt: v.number(),
+    email: v.optional(v.string()),
+    emailVerificationTime: v.optional(v.number()),
+    phone: v.optional(v.string()),
+    phoneVerificationTime: v.optional(v.number()),
+    isAnonymous: v.optional(v.boolean()),
+    defaultWorkspaceId: v.optional(v.id("workspaces")),
   })
-    .index("by_auth_subject", ["authSubject"])
-    .index("by_email", ["email"]),
+    .index("email", ["email"])
+    .index("phone", ["phone"]),
 
   workspaces: defineTable({
     name: v.string(),

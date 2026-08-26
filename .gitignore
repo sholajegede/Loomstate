@@ -36,3 +36,4 @@ extension/dist/
 *.log
 npm-debug.log*
 *.tsbuildinfo
+.auth-keys.json
