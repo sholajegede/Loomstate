@@ -13,7 +13,14 @@ import { decryptSecret, encryptSecret, keyHint } from "./lib/crypto";
 import { requireSession, requireWorkspaceWrite } from "./lib/access";
 import type { Id } from "./_generated/dataModel";
 
-const provider = v.union(v.literal("openai"), v.literal("firecrawl"));
+const provider = v.union(
+  v.literal("openai"),
+  v.literal("firecrawl"),
+  v.literal("agentmail_webhook"),
+);
+
+/** Only these keys are set by the owner in Settings. */
+const userProvider = v.union(v.literal("openai"), v.literal("firecrawl"));
 
 /** Which keys the workspace holds. The key itself is never returned. */
 export const status = query({
@@ -110,7 +117,7 @@ export const read = internalQuery({
  * before it stores anything, so a wrong key fails here and not later.
  */
 export const save = action({
-  args: { provider, key: v.string() },
+  args: { provider: userProvider, key: v.string() },
   returns: v.object({ ok: v.boolean(), detail: v.string() }),
   handler: async (ctx, args): Promise<{ ok: boolean; detail: string }> => {
     const userId = await getAuthUserId(ctx);
@@ -138,7 +145,7 @@ export const save = action({
 });
 
 export const forget = mutation({
-  args: { provider },
+  args: { provider: userProvider },
   returns: v.null(),
   handler: async (ctx, args) => {
     const { workspace } = await requireSession(ctx);

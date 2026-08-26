@@ -88,6 +88,7 @@ function Sidebar({
   workspaceName: string;
 }) {
   const { signOut } = useAuthActions();
+  const pending = useQuery(api.approvals.pendingCount) ?? 0;
 
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-ink-800 bg-ink-900/60 px-3 py-5">
@@ -116,6 +117,11 @@ function Sidebar({
           >
             <Icon />
             {label}
+            {to === "/approvals" && pending > 0 ? (
+              <span className="ml-auto rounded-full bg-alarm px-1.5 py-0.5 text-[10px] font-medium text-ink-950">
+                {pending}
+              </span>
+            ) : null}
           </NavLink>
         ))}
       </nav>

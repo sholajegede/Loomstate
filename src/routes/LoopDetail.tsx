@@ -3,9 +3,10 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { Card, EmptyState, Page } from "../components/Page";
-import { AlivenessBar, StatusTag, TIERS, TypeTag } from "../components/LoopBits";
+import { AlivenessBar, StatusTag, TypeTag } from "../components/LoopBits";
 import { duration, timeAgo } from "../lib/format";
 import { LiveWatches } from "../components/Watches";
+import { AgentPanel } from "../components/AgentPanel";
 
 export default function LoopDetail() {
   const { loopId } = useParams();
@@ -14,7 +15,6 @@ export default function LoopDetail() {
     api.loops.get,
     loopId === undefined ? "skip" : { loopId: loopId as Id<"loops"> },
   );
-  const setTier = useMutation(api.loops.setTier);
   const close = useMutation(api.loops.close);
 
   if (data === undefined) {
@@ -95,30 +95,7 @@ export default function LoopDetail() {
         </div>
 
         <div className="min-w-0 space-y-4">
-          <Card>
-            <h2 className="text-sm font-medium">Agent authority</h2>
-            <p className="mt-1 text-sm text-ink-400">
-              Choose how much the agent may do on this loop.
-            </p>
-            <div className="mt-3 space-y-1.5">
-              {TIERS.map((tier) => (
-                <button
-                  key={tier.id}
-                  onClick={() =>
-                    void setTier({ loopId: loop._id, tier: tier.id })
-                  }
-                  className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${
-                    loop.tier === tier.id
-                      ? "border-thread/50 bg-thread/5"
-                      : "border-ink-800 hover:border-ink-600"
-                  }`}
-                >
-                  <p className="text-sm text-ink-100">{tier.label}</p>
-                  <p className="text-[11px] text-ink-400">{tier.help}</p>
-                </button>
-              ))}
-            </div>
-          </Card>
+          <AgentPanel loopId={loop._id} />
 
           <Card>
             <h2 className="text-sm font-medium">Keywords</h2>

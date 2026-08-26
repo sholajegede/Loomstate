@@ -14,6 +14,7 @@ export default function Settings() {
     >
       <div className="grid gap-4">
         <Pairing />
+        <InboundEmail />
         <Exclusions />
         <Keys />
       </div>
@@ -130,6 +131,76 @@ function Field({ label, value }: { label: string; value: string }) {
         </button>
       </div>
     </div>
+  );
+}
+
+function InboundEmail() {
+  const status = useQuery(api.email.inboundStatus);
+  const connect = useAction(api.email.connectReplies);
+  const agents = useQuery(api.agents.list);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  async function onConnect() {
+    setBusy(true);
+    setNote(null);
+    try {
+      const result = await connect({});
+      setNote(result.detail);
+    } catch (error) {
+      setNote(
+        error instanceof Error ? error.message : "Loomstate could not connect replies.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <h2 className="text-sm font-medium">Agent email</h2>
+      <p className="mt-1 text-sm text-ink-400">
+        Each agent owns an inbox. Loomstate never sends from your personal email.
+        Connect replies so an answer returns to the loop.
+      </p>
+
+      <div className="mt-4 flex items-center gap-3 rounded-lg border border-ink-800 px-3 py-2.5">
+        <span
+          className={`h-1.5 w-1.5 rounded-full ${
+            status?.connected ? "bg-thread" : "bg-warp"
+          }`}
+        />
+        <span className="flex-1 text-sm text-ink-300">
+          {status?.connected
+            ? "AgentMail posts every reply to Loomstate."
+            : "Replies do not reach Loomstate yet."}
+        </span>
+        <button
+          onClick={() => void onConnect()}
+          disabled={busy}
+          className="rounded-lg border border-ink-700 px-3 py-1.5 text-xs hover:bg-ink-800 disabled:opacity-50"
+        >
+          {busy ? "Connecting" : status?.connected ? "Reconnect" : "Connect replies"}
+        </button>
+      </div>
+
+      {(agents ?? []).length > 0 ? (
+        <ul className="mt-3 divide-y divide-ink-800 rounded-lg border border-ink-800">
+          {agents?.map((agent) => (
+            <li key={agent._id} className="flex items-center gap-3 px-3 py-2">
+              <span className="min-w-0 flex-1 truncate font-mono text-xs text-thread">
+                {agent.inboxAddress}
+              </span>
+              <span className="shrink-0 text-[11px] text-ink-400">
+                {timeAgo(agent.createdAt)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {note !== null ? <p className="mt-2 text-xs text-ink-400">{note}</p> : null}
+    </Card>
   );
 }
 

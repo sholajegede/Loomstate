@@ -326,7 +326,11 @@ export default defineSchema({
   /** BYOK material. Encrypted server-side. Never sent to the extension. */
   secrets: defineTable({
     workspaceId: v.id("workspaces"),
-    provider: v.union(v.literal("openai"), v.literal("firecrawl")),
+    provider: v.union(
+      v.literal("openai"),
+      v.literal("firecrawl"),
+      v.literal("agentmail_webhook"),
+    ),
     ciphertext: v.string(),
     iv: v.string(),
     hint: v.string(),
