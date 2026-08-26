@@ -3,6 +3,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Card, Page } from "../components/Page";
 import { timeAgo } from "../lib/format";
+import { readableError } from "../lib/errors";
 
 const SITE_URL = import.meta.env.VITE_CONVEX_SITE_URL;
 
@@ -148,9 +149,7 @@ function InboundEmail() {
       const result = await connect({});
       setNote(result.detail);
     } catch (error) {
-      setNote(
-        error instanceof Error ? error.message : "Loomstate could not connect replies.",
-      );
+      setNote(readableError(error, "Loomstate could not connect replies."));
     } finally {
       setBusy(false);
     }
@@ -269,7 +268,7 @@ function Keys() {
       setNote(result.detail);
       if (result.ok) setKey("");
     } catch (error) {
-      setNote(error instanceof Error ? error.message : "Loomstate could not save the key.");
+      setNote(readableError(error, "Loomstate could not save the key."));
     } finally {
       setBusy(false);
     }

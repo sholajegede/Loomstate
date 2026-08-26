@@ -5,6 +5,7 @@ import { api } from "../../convex/_generated/api";
 import { EmptyState, Page } from "../components/Page";
 import { AlivenessBar, StatusTag, TypeTag } from "../components/LoopBits";
 import { timeAgo } from "../lib/format";
+import { readableError } from "../lib/errors";
 
 export default function IntentMap() {
   const loops = useQuery(api.loops.list);
@@ -20,7 +21,7 @@ export default function IntentMap() {
       const result = await reconstruct({});
       setNote(result.detail);
     } catch (error) {
-      setNote(error instanceof Error ? error.message : "The run failed.");
+      setNote(readableError(error, "The run failed."));
     } finally {
       setBusy(false);
     }

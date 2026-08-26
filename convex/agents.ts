@@ -8,7 +8,7 @@ import {
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireDocIn, requireSession } from "./lib/access";
-import { createInbox } from "./lib/agentmail";
+import { createInbox, listInboxes } from "./lib/agentmail";
 
 function agentMailKey(): string {
   const key = process.env.AGENTMAIL_API_KEY;
@@ -152,10 +152,27 @@ export const ensureForLoop = internalAction({
       };
     }
 
-    const inbox = await createInbox(agentMailKey(), {
-      username: usernameFor(args.loopTitle, args.loopId),
-      displayName: `Loomstate agent for ${args.loopTitle}`.slice(0, 80),
-    });
+    // Loomstate prefers one inbox per loop. Some AgentMail credentials are
+    // scoped to a single inbox and cannot create more. In that case the agent
+    // uses the inbox the credential already owns instead of failing.
+    const key = agentMailKey();
+    let inbox;
+    try {
+      inbox = await createInbox(key, {
+        username: usernameFor(args.loopTitle, args.loopId),
+        displayName: `Loomstate agent for ${args.loopTitle}`.slice(0, 80),
+      });
+    } catch (caught) {
+      const existing = await listInboxes(key);
+      if (existing.length === 0) {
+        throw new Error(
+          `Loomstate cannot create an agent inbox and found none to use. ${
+            caught instanceof Error ? caught.message : ""
+          }`.slice(0, 400),
+        );
+      }
+      inbox = existing[0];
+    }
 
     const agentId: Id<"agents"> = await ctx.runMutation(
       internal.agents.storeAgent,

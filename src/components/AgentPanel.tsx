@@ -5,6 +5,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { Card } from "./Page";
 import { TIERS } from "./LoopBits";
 import { timeAgo } from "../lib/format";
+import { readableError } from "../lib/errors";
 
 export function AgentPanel({ loopId }: { loopId: Id<"loops"> }) {
   const agent = useQuery(api.agents.forLoop, { loopId });
@@ -30,7 +31,7 @@ export function AgentPanel({ loopId }: { loopId: Id<"loops"> }) {
       });
       setNote(result.detail);
     } catch (error) {
-      setNote(error instanceof Error ? error.message : "The agent run failed.");
+      setNote(readableError(error, "The agent run failed."));
     } finally {
       setBusy(false);
     }

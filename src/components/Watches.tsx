@@ -4,6 +4,7 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { Card } from "./Page";
 import { timeAgo } from "../lib/format";
+import { readableError } from "../lib/errors";
 
 const DIFF_TONE: Record<string, string> = {
   price: "border-warp/40 bg-warp/5",
@@ -38,7 +39,7 @@ export function LiveWatches({
       const result = await checkLoop({ loopId });
       setNote(result.detail);
     } catch (error) {
-      setNote(error instanceof Error ? error.message : "The check failed.");
+      setNote(readableError(error, "The check failed."));
     } finally {
       setBusy(false);
     }

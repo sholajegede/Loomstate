@@ -44,6 +44,17 @@ export async function createInbox(
   });
 }
 
+/** Lists the inboxes this credential can reach. */
+export async function listInboxes(apiKey: string): Promise<Inbox[]> {
+  const payload = await call<{ inboxes?: Inbox[]; count?: number } | Inbox[]>(
+    apiKey,
+    "/inboxes",
+    { method: "GET" },
+  );
+  if (Array.isArray(payload)) return payload;
+  return payload.inboxes ?? [];
+}
+
 export type SentMessage = { message_id: string; thread_id: string };
 
 /** Sends one email from an agent inbox. */

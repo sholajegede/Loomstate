@@ -6,6 +6,7 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { Card, EmptyState, Page } from "../components/Page";
 import { timeAgo } from "../lib/format";
+import { readableError } from "../lib/errors";
 
 type Payload = { to?: string[]; subject?: string; body?: string; from?: string };
 
@@ -68,11 +69,7 @@ function ApprovalCard({
       await confirmStepUp({ approvalId: approval._id });
       setNote("Loomstate confirmed your identity. You can approve now.");
     } catch (error) {
-      setNote(
-        error instanceof Error
-          ? error.message
-          : "The identity check did not finish.",
-      );
+      setNote(readableError(error, "The identity check did not finish."));
     } finally {
       setBusy(false);
     }
@@ -93,7 +90,7 @@ function ApprovalCard({
       const result = await approve({ approvalId: approval._id });
       setNote(result.detail);
     } catch (error) {
-      setNote(error instanceof Error ? error.message : "The send failed.");
+      setNote(readableError(error, "The send failed."));
     } finally {
       setBusy(false);
     }
