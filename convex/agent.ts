@@ -421,6 +421,7 @@ export const workLoop = internalAction({
       v.literal("inbound_email"),
     ),
     recipientHint: v.optional(v.string()),
+    instruction: v.optional(v.string()),
   },
   returns: v.object({
     outcome: v.string(),
@@ -469,7 +470,7 @@ export const workLoop = internalAction({
       });
 
       const apiKey = await resolveOpenAiKey(ctx, brief.workspaceId);
-      const prompt = buildPrompt(brief, args.recipientHint);
+      const prompt = buildPrompt(brief, args.recipientHint, args.instruction);
 
       const { value: decision } = await askForJson<Decision>(apiKey, {
         system: DECIDE_SYSTEM,
@@ -625,7 +626,11 @@ export const workLoop = internalAction({
 
 /** Runs the agent on one loop on the owner's request. */
 export const workLoopNow = action({
-  args: { loopId: v.id("loops"), recipient: v.optional(v.string()) },
+  args: {
+    loopId: v.id("loops"),
+    recipient: v.optional(v.string()),
+    instruction: v.optional(v.string()),
+  },
   returns: v.object({
     outcome: v.string(),
     detail: v.string(),
@@ -646,6 +651,7 @@ export const workLoopNow = action({
       loopId: args.loopId,
       trigger: "manual",
       recipientHint: args.recipient,
+      instruction: args.instruction,
     });
   },
 });
@@ -692,6 +698,7 @@ function buildPrompt(
     }[];
   },
   recipientHint: string | undefined,
+  instruction: string | undefined,
 ): string {
   return [
     `Goal: ${brief.title}`,
@@ -722,5 +729,8 @@ function buildPrompt(
     recipientHint === undefined
       ? "No recipient address was given. Use one the evidence supports, or return null."
       : `Write to this address: ${recipientHint}`,
+    instruction === undefined || instruction.trim() === ""
+      ? ""
+      : `\nWhat the person asked you to do: ${instruction.trim()}\nFollow this, and classify the risk of what it asks honestly.`,
   ].join("\n");
 }

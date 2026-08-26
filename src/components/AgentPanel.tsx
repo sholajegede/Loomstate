@@ -16,6 +16,7 @@ export function AgentPanel({ loopId }: { loopId: Id<"loops"> }) {
   const workLoop = useAction(api.agent.workLoopNow);
 
   const [recipient, setRecipient] = useState("");
+  const [instruction, setInstruction] = useState("");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
 
@@ -28,6 +29,7 @@ export function AgentPanel({ loopId }: { loopId: Id<"loops"> }) {
       const result = await workLoop({
         loopId,
         recipient: recipient.trim() === "" ? undefined : recipient.trim(),
+        instruction: instruction.trim() === "" ? undefined : instruction.trim(),
       });
       setNote(result.detail);
     } catch (error) {
@@ -112,6 +114,19 @@ export function AgentPanel({ loopId }: { loopId: Id<"loops"> }) {
             onChange={(e) => setRecipient(e.target.value)}
             placeholder="seller@example.com"
             className="mt-1 w-full rounded-lg border border-ink-700 bg-ink-900 px-3 py-2 text-sm outline-none focus:border-thread/60"
+          />
+        </div>
+
+        <div className="mt-3">
+          <p className="text-[11px] text-ink-400">
+            What should the agent do (optional)
+          </p>
+          <textarea
+            value={instruction}
+            onChange={(e) => setInstruction(e.target.value)}
+            rows={2}
+            placeholder="Ask if the phone is still available"
+            className="mt-1 w-full resize-none rounded-lg border border-ink-700 bg-ink-900 px-3 py-2 text-sm outline-none focus:border-thread/60"
           />
         </div>
 
