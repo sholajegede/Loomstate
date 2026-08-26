@@ -55,8 +55,9 @@ export async function requireWorkspaceRead(
 
   const viewer = await ctx.db
     .query("viewers")
-    .withIndex("by_workspace", (q) => q.eq("workspaceId", workspaceId))
-    .filter((q) => q.eq(q.field("userId"), user._id))
+    .withIndex("by_workspace_user", (q) =>
+      q.eq("workspaceId", workspaceId).eq("userId", user._id),
+    )
     .first();
   if (viewer === null) throw new Error("No access to this workspace.");
   return workspace;

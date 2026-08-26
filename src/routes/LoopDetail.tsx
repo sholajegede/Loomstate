@@ -5,6 +5,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { Card, EmptyState, Page } from "../components/Page";
 import { AlivenessBar, StatusTag, TIERS, TypeTag } from "../components/LoopBits";
 import { duration, timeAgo } from "../lib/format";
+import { LiveWatches } from "../components/Watches";
 
 export default function LoopDetail() {
   const { loopId } = useParams();
@@ -59,12 +60,14 @@ export default function LoopDetail() {
         </span>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <div className="space-y-4">
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[1.4fr_1fr]">
+        <div className="min-w-0 space-y-4">
           <Card>
             <p className="text-[11px] text-ink-400">Next step</p>
             <p className="mt-1 text-sm text-ink-100">{loop.nextStep}</p>
           </Card>
+
+          <LiveWatches loopId={loop._id} sourceUrls={loop.sourceUrls} />
 
           <Card>
             <h2 className="text-sm font-medium">Pages behind this loop</h2>
@@ -91,7 +94,7 @@ export default function LoopDetail() {
           </Card>
         </div>
 
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <Card>
             <h2 className="text-sm font-medium">Agent authority</h2>
             <p className="mt-1 text-sm text-ink-400">

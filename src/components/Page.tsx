@@ -12,7 +12,7 @@ export function Page({
   children: ReactNode;
 }) {
   return (
-    <div className="mx-auto max-w-6xl px-8 py-9">
+    <div className="mx-auto min-w-0 max-w-6xl px-8 py-9">
       <header className="mb-7 flex items-start justify-between gap-6">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
@@ -52,7 +52,7 @@ export function Card({
 }) {
   return (
     <div
-      className={`rounded-xl border border-ink-800 bg-ink-900/60 p-5 ${className}`}
+      className={`min-w-0 rounded-xl border border-ink-800 bg-ink-900/60 p-5 ${className}`}
     >
       {children}
     </div>

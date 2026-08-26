@@ -75,6 +75,7 @@ export default defineSchema({
     acceptedAt: v.optional(v.number()),
   })
     .index("by_workspace", ["workspaceId"])
+    .index("by_workspace_user", ["workspaceId", "userId"])
     .index("by_email", ["email"]),
 
   /** A paired browser extension. The token is the extension's only credential. */
@@ -111,6 +112,7 @@ export default defineSchema({
   })
     .index("by_workspace_time", ["workspaceId", "occurredAt"])
     .index("by_workspace_unclustered", ["workspaceId", "clusteredAt"])
+    .index("by_workspace_url", ["workspaceId", "url"])
     .index("by_loop", ["loopId"])
     .index("by_workspace_host", ["workspaceId", "host"]),
 
@@ -149,6 +151,7 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_loop", ["loopId"])
+    .index("by_loop_url", ["loopId", "url"])
     .index("by_workspace", ["workspaceId"])
     .index("by_active_crawl", ["active", "lastCrawlAt"]),
 

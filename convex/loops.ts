@@ -338,7 +338,7 @@ Rules:
 - Add pages to an existing loop when they serve that same goal. Only start a new loop for a genuinely new goal.
 - Ignore idle browsing: news, social feeds, video, and single pages with no goal behind them. Put those in skippedEventIds.
 - Write the title as the person would say it out loud, under 60 characters.
-- Write nextStep as the one concrete action that moves the goal forward. Name the doer.
+- Write nextStep as one concrete action that moves the goal forward. Start it with the doer, for example "Ask the Jiji seller if the phone is still available." Never append a parenthetical such as "(you)".
 - momentum is 0 to 1. It says how committed the person looks: repeated visits, comparison, checkout pages, and specific queries mean high momentum. One idle look means low.
 - Write every field in plain, direct English. Short sentences.`;
 

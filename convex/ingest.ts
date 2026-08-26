@@ -70,13 +70,19 @@ export const recordEvents = internalMutation({
 
       // Merge repeat reads of the same page inside one session instead of
       // storing a new row for every tab focus.
-      const recent = await ctx.db
+      const sameUrl = await ctx.db
         .query("events")
-        .withIndex("by_workspace_time", (q) =>
-          q.eq("workspaceId", args.workspaceId).gte("occurredAt", event.occurredAt - 30 * 60 * 1000),
+        .withIndex("by_workspace_url", (q) =>
+          q.eq("workspaceId", args.workspaceId).eq("url", parsed.url),
         )
-        .filter((q) => q.eq(q.field("url"), parsed.url))
+        .order("desc")
         .first();
+      const recent =
+        sameUrl !== null &&
+        event.occurredAt - sameUrl.occurredAt < 30 * 60 * 1000 &&
+        sameUrl.occurredAt - event.occurredAt < 30 * 60 * 1000
+          ? sameUrl
+          : null;
 
       if (recent !== null) {
         await ctx.db.patch(recent._id, {
