@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Loomstate</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Loomstate</h1>
+      <span id="status" class="status">Not paired</span>
+    </header>
+
+    <section id="counts" class="counts hidden">
+      <p><strong id="loopCount">0</strong> loops active</p>
+      <p><strong id="approvalCount">0</strong> need approval</p>
+    </section>
+
+    <section id="pairing" class="pairing">
+      <label for="endpoint">Loomstate address</label>
+      <input id="endpoint" type="url" placeholder="https://your-app.convex.site" />
+      <label for="token">Pairing token</label>
+      <input id="token" type="password" placeholder="Paste the token from Settings" />
+      <button id="save">Pair this browser</button>
+    </section>
+
+    <section class="controls">
+      <button id="pause" class="ghost">Pause capture</button>
+      <button id="dashboard" class="ghost">Open dashboard</button>
+    </section>
+
+    <p id="message" class="message"></p>
+  </body>
+  <script type="module" src="popup.js"></script>
+</html>

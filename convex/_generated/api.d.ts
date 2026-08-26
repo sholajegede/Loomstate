@@ -9,8 +9,14 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as blocklist from "../blocklist.js";
+import type * as devices from "../devices.js";
+import type * as events from "../events.js";
 import type * as http from "../http.js";
+import type * as ingest from "../ingest.js";
 import type * as lib_access from "../lib/access.js";
+import type * as lib_hash from "../lib/hash.js";
+import type * as lib_url from "../lib/url.js";
 import type * as workspaces from "../workspaces.js";
 
 import type {
@@ -21,8 +27,14 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  blocklist: typeof blocklist;
+  devices: typeof devices;
+  events: typeof events;
   http: typeof http;
+  ingest: typeof ingest;
   "lib/access": typeof lib_access;
+  "lib/hash": typeof lib_hash;
+  "lib/url": typeof lib_url;
   workspaces: typeof workspaces;
 }>;
 
