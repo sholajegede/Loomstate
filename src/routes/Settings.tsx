@@ -181,13 +181,69 @@ function Exclusions() {
 }
 
 function Keys() {
+  const stored = useQuery(api.secrets.status);
+  const save = useAction(api.secrets.save);
+  const forget = useMutation(api.secrets.forget);
+  const [key, setKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  const openai = (stored ?? []).find((s) => s.provider === "openai");
+
+  async function onSave() {
+    setBusy(true);
+    setNote(null);
+    try {
+      const result = await save({ provider: "openai", key });
+      setNote(result.detail);
+      if (result.ok) setKey("");
+    } catch (error) {
+      setNote(error instanceof Error ? error.message : "Loomstate could not save the key.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <Card>
-      <h2 className="text-sm font-medium">Your API keys</h2>
+      <h2 className="text-sm font-medium">Your OpenAI key</h2>
       <p className="mt-1 text-sm text-ink-400">
-        Loomstate uses your own OpenAI key to rebuild loops and draft email. Key
-        storage arrives with the agent.
+        Loomstate uses your own key to rebuild loops, judge risk, and draft email. The
+        key is encrypted on the server and never reaches the extension.
       </p>
+
+      {openai !== undefined ? (
+        <div className="mt-4 flex items-center gap-3 rounded-lg border border-ink-800 px-3 py-2.5">
+          <span className="h-1.5 w-1.5 rounded-full bg-thread" />
+          <span className="flex-1 font-mono text-xs text-ink-300">{openai.hint}</span>
+          <span className="text-xs text-ink-400">saved {timeAgo(openai.updatedAt)}</span>
+          <button
+            onClick={() => void forget({ provider: "openai" })}
+            className="rounded border border-ink-700 px-2 py-1 text-[11px] text-ink-300 hover:bg-ink-800"
+          >
+            Remove
+          </button>
+        </div>
+      ) : null}
+
+      <div className="mt-3 flex gap-2">
+        <input
+          type="password"
+          value={key}
+          onChange={(e) => setKey(e.target.value)}
+          placeholder="sk-..."
+          className="flex-1 rounded-lg border border-ink-700 bg-ink-900 px-3 py-2 font-mono text-sm outline-none focus:border-thread/60"
+        />
+        <button
+          onClick={() => void onSave()}
+          disabled={busy || key.trim() === ""}
+          className="rounded-lg border border-ink-700 px-3.5 py-2 text-sm hover:bg-ink-800 disabled:opacity-50"
+        >
+          {busy ? "Checking" : "Save key"}
+        </button>
+      </div>
+
+      {note !== null ? <p className="mt-2 text-xs text-ink-400">{note}</p> : null}
     </Card>
   );
 }
