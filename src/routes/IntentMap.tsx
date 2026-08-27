@@ -10,6 +10,7 @@ import { readableError } from "../lib/errors";
 export default function IntentMap() {
   const loops = useQuery(api.loops.list);
   const stats = useQuery(api.events.stats);
+  const setup = useQuery(api.setup.status);
   const reconstruct = useAction(api.loops.reconstruct);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -59,13 +60,25 @@ export default function IntentMap() {
         </p>
       ) : null}
 
-      {loops === undefined ? (
+      {loops === undefined || setup === undefined ? (
         <p className="text-sm text-ink-400">Loading</p>
+      ) : loops.length === 0 && !setup.hasKey ? (
+        <NeedsSetup />
       ) : loops.length === 0 ? (
         <EmptyState
           title="No loops yet"
-          body="Loomstate needs browsing signal first. Pair a browser and browse as you normally do. Loops appear here on their own within a few minutes."
-          hint="Open Settings to pair a browser."
+          body={
+            setup.pairedBrowsers === 0
+              ? "Loomstate has your key but no browser to read. Connect one and browse as you normally do."
+              : setup.hasSignal
+                ? "Loomstate has your browsing and is working out the goals behind it. Loops appear here on their own within a few minutes."
+                : "Loomstate is ready and waiting for your first pages. Browse as you normally do."
+          }
+          hint={
+            setup.pairedBrowsers === 0
+              ? "Open setup to connect a browser."
+              : undefined
+          }
         />
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
@@ -110,5 +123,30 @@ export default function IntentMap() {
         </div>
       )}
     </Page>
+  );
+}
+
+/**
+ * What the person sees before Loomstate can do anything. An empty loop screen
+ * would sit there working silently on nothing, so this says what is missing.
+ */
+function NeedsSetup() {
+  return (
+    <div className="rounded-xl border border-thread/30 bg-thread/5 px-8 py-10 text-center">
+      <p className="text-sm font-medium text-ink-100">
+        Loomstate needs your OpenAI key first
+      </p>
+      <p className="mx-auto mt-2 max-w-md text-sm text-ink-400">
+        Loomstate reads your browsing and works out the goals behind it. It uses
+        your own key to do that, so it cannot build a single loop until you add
+        one.
+      </p>
+      <Link
+        to="/setup"
+        className="mt-4 inline-block rounded-lg bg-thread px-4 py-2 text-sm font-medium text-ink-950 hover:opacity-90"
+      >
+        Finish setting up
+      </Link>
+    </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { NavLink, Route, Routes } from "react-router-dom";
+import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { Authenticated, AuthLoading, Unauthenticated, useMutation, useQuery } from "convex/react";
 import { useAuthActions } from "@convex-dev/auth/react";
 import { api } from "../convex/_generated/api";
@@ -21,6 +21,7 @@ import Signal from "./routes/Signal";
 import SignIn from "./routes/SignIn";
 import { LoopsSidebar } from "./components/LoopsSidebar";
 import AskLoomstate from "./routes/AskLoomstate";
+import Setup from "./routes/Setup";
 
 const nav = [
   { to: "/", label: "Intent map", icon: MapIcon, end: true },
@@ -52,6 +53,8 @@ export default function App() {
 function Workspace() {
   const session = useQuery(api.workspaces.current);
   const ensureWorkspace = useMutation(api.workspaces.ensure);
+  const setup = useQuery(api.setup.status);
+  const location = useLocation();
 
   useEffect(() => {
     if (session !== undefined && session !== null && session.workspace === null) {
@@ -63,6 +66,24 @@ function Workspace() {
     return (
       <div className="flex h-full items-center justify-center text-sm text-ink-400">
         Preparing your workspace
+      </div>
+    );
+  }
+
+  // A new workspace goes to setup first. Nothing works without a key, so an
+  // empty app would just sit there looking broken.
+  if (
+    setup !== undefined &&
+    setup.showOnArrival &&
+    location.pathname !== "/setup"
+  ) {
+    return <Navigate to="/setup" replace />;
+  }
+
+  if (location.pathname === "/setup") {
+    return (
+      <div className="h-full overflow-y-auto">
+        <Setup />
       </div>
     );
   }
@@ -79,6 +100,7 @@ function Workspace() {
           <Route path="/approvals" element={<Approvals />} />
           <Route path="/audit" element={<AuditLog />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/setup" element={<Setup />} />
         </Routes>
       </main>
     </div>

@@ -79,6 +79,10 @@ export default defineSchema({
     // Which channels an approval reaches the owner through. Absent means on.
     notifyEmail: v.optional(v.boolean()),
     notifyBrowser: v.optional(v.boolean()),
+    // First-run setup. Done means the owner finished it, skipped means they
+    // chose to come back later. Neither set means they have not seen it.
+    setupDoneAt: v.optional(v.number()),
+    setupSkippedAt: v.optional(v.number()),
   }).index("by_owner", ["ownerId"]),
 
   /** Read-only watchers invited to a workspace. */

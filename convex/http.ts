@@ -473,6 +473,7 @@ http.route({
  */
 const PAGE_PATHS = [
   "/",
+  "/setup",
   "/ask",
   "/signal",
   "/approvals",
