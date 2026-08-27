@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5-mini, with gpt-4.1-mini and gpt-4o-mini as fallbacks
 - **Started:** 2026-08-26T21:21:20Z
-- **Last updated:** 2026-08-27T02:40:00Z
+- **Last updated:** 2026-08-27T03:40:00Z
 
 ## Log
 
@@ -152,7 +152,7 @@ This replaced the hosted publishing gateway, which returned 502 on every
 authenticated upload while this was built. Serving from the deployment removed
 the outside dependency and put the app on the `convex.site` origin directly.
 
-### 2026-08-27 - working tree
+### 2026-08-27 - deployed
 Deployed to production. The backend and all nine environment variables are set
 on the production deployment, and the web app is published to
 https://incredible-sardine-959.convex.site. Deep links, asset caching, the
@@ -167,3 +167,46 @@ the live deployment from a fresh sign-in. The AgentMail credential in use is
 scoped to one inbox, so every agent shares that address instead of holding its
 own. Firecrawl has reported only first-read diffs so far; a price or
 availability change needs the watched page to actually change.
+
+### 2026-08-27 - working tree
+Turned the interaction model the right way round.
+
+Before this, a person had to do the agent's work through forms: pick an
+authority tier, type the seller's address, write an instruction, press a button,
+then open the approval queue. That is a dashboard, not an agent. Loomstate now
+runs on its own and pulls the person in only to approve an action it may not
+take alone.
+
+- Reconstruction is ambient. A cron rebuilds loops from new browsing signal
+  every five minutes. "Re-scan now" stays as a manual re-scan, demoted to a
+  secondary control.
+- A new loop arrives already watched. Loomstate picks the pages worth re-reading
+  and skips search pages, feeds, and home pages, which change for reasons the
+  loop does not care about.
+- A cron works every loop that has something new: an unread change on the live
+  web, an unanswered reply, or a loop never looked at. The agent decides from
+  the loop's own next step. Nobody types an instruction.
+- The agent reads the counterparty's address off the page Firecrawl already
+  fetched. When a page prints none, the loop records "No contact found on the
+  watched pages" as a blocker instead of asking the person to look one up.
+  Manual entry stays as an escape hatch.
+- Authority is set once in settings and every loop inherits it. Loomstate
+  materialises the grant record itself. A workspace built before the setting
+  existed adopts it once, so old loops do not sit still forever.
+- The step-up gate is untouched. Money and one-way actions still wait for a
+  fresh passkey check, whatever the standing authority says.
+
+Confirmed on the live deployment: all three sweeps fire on their own
+(`reconstruct` every five minutes, `sweep` and `work` every fifteen), two loops
+seeded ten watches between them without anyone pressing Watch, both loops
+received an `act` grant nobody filled in a form for, both were worked under
+`trigger: "schedule"`, and one recorded the no-contact blocker rather than
+asking. Contact extraction was proved end to end against a page that does print
+an address; the address and its source URL landed on the loop with no typing,
+and the test was then cleared and its watch stopped.
+
+One consequence worth stating plainly: with the standing authority at `act`, the
+agent sends its own low-stakes questions to addresses it reads off pages,
+without a person seeing them first. That is the autonomy this design asks for.
+`Draft` keeps every outgoing email behind approval for anyone who wants that
+instead, and `Pause` stops the agent across the workspace.
