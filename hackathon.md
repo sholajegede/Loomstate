@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5-mini, with gpt-4.1-mini and gpt-4o-mini as fallbacks
 - **Started:** 2026-08-26T21:21:20Z
-- **Last updated:** 2026-08-27T03:40:00Z
+- **Last updated:** 2026-08-27T04:10:00Z
 
 ## Log
 
@@ -168,7 +168,7 @@ scoped to one inbox, so every agent shares that address instead of holding its
 own. Firecrawl has reported only first-read diffs so far; a price or
 availability change needs the watched page to actually change.
 
-### 2026-08-27 - working tree
+### 2026-08-27 - 3450566
 Turned the interaction model the right way round.
 
 Before this, a person had to do the agent's work through forms: pick an
@@ -210,3 +210,40 @@ agent sends its own low-stakes questions to addresses it reads off pages,
 without a person seeing them first. That is the autonomy this design asks for.
 `Draft` keeps every outgoing email behind approval for anyone who wants that
 instead, and `Pause` stops the agent across the workspace.
+
+### 2026-08-27 - e6cf7bd
+A new workspace now starts at draft authority, so every outgoing email waits for
+approval until the owner decides otherwise. Act and Pause stay one click away in
+settings. Workspaces that already exist keep the authority they had
+(`convex/workspaces.ts`, `convex/loops.ts`).
+
+### 2026-08-27 - 4d71a41
+Closed the hole in "shut the tab and let it run": the agent kept working, but a
+waiting approval reached nobody.
+
+Creating an approval now raises one server-side event that fans out to two
+channels. The extension polls for queued alerts on its own alarm and raises a
+browser notification; selecting it opens the approval on the live URL. The agent
+also emails the owner from its own inbox with the loop, the reason, the drafted
+action, and the link. Both start from the moment the approval is written, so
+neither depends on the app or the extension being open.
+
+An approval is stamped the first time it is announced, so nobody is told twice.
+Nothing else notifies: an action the agent may take inside its grant never
+reaches the owner, because nothing is waiting on them. Convex features: scheduled
+functions, HTTP actions, internal actions, indexes (`convex/notifications.ts`,
+`convex/http.ts`, `convex/agent.ts`, `extension/background.js`).
+
+Confirmed on the live deployment: a money-committing action produced a pending,
+step-up-gated approval; the audit log recorded "Loomstate told the owner through
+a browser notification and an email"; a second announcement of the same approval
+was refused; and draining the queue through the device endpoint returned the
+alert once and nothing on the next call. Earlier autonomous cycles that acted
+inside their grant produced no notifications at all.
+
+### 2026-08-27 - c527d67
+Fixed a false change the notification work exposed. Firecrawl reported the price
+on a listing moving from "₦ 2,850,000" to "₦2,850,000", which is the same price
+with different spacing. Prices and availability are now compared with spacing
+and case removed, so a site reflowing its markup no longer wakes the agent
+(`convex/lib/firecrawl.ts`, `convex/watches.ts`).
