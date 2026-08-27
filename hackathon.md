@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5-mini, with gpt-4.1-mini and gpt-4o-mini as fallbacks
 - **Started:** 2026-08-26T21:21:20Z
-- **Last updated:** 2026-08-27T05:10:00Z
+- **Last updated:** 2026-08-27T15:35:00Z
 
 ## Log
 
@@ -327,3 +327,38 @@ when that grant expires, the Firecrawl evidence with its before and after, the
 email body, and a link to the loop. The view only reads
 (`convex/loops.ts`, `convex/auditLog.ts`, `src/components/LoopsSidebar.tsx`,
 `src/routes/AuditLog.tsx`).
+
+### 2026-08-27 - bc910ba, 3bf247d
+A chat over what Loomstate already recorded. It reads and answers; it sends
+nothing and changes no agent state.
+
+Two scopes. A loop chat opens on the loop page and is grounded in that loop's
+own records: the pages the person read, the pages Loomstate watches and the
+changes it found, the email in both directions, the agent runs, the approvals,
+the live grant, and the audit entries. A workspace chat at `/ask` is grounded in
+recent activity across every loop, plus what is waiting for approval and whether
+the agent is paused.
+
+Retrieval happens before the model is asked anything. Each scope has an internal
+query that reads records through an index, with a fixed cap on every read, and
+renders them as text. The model is given that text and told to answer from it
+alone: cite the price, subject line, or audit entry behind a claim, and say
+plainly when the records do not show the answer. Every reply carries a line
+naming what it read, such as "read the loop record, the authority grants, 7
+browsing events, 3 watched pages, 15 detected changes". The workspace OpenAI key
+does the answering, so this costs the owner nothing extra
+(`convex/chat.ts`, `convex/lib/openai.ts`, `src/components/Chat.tsx`,
+`src/routes/AskLoomstate.tsx`).
+
+Checked against real data before shipping. Asked what it had done, it named the
+four loops, the agent address, the standing authority, the domains being
+watched, and that nothing waited for approval. Asked about a seller, a laptop
+model, and a phone number that appear in no record, it answered that the records
+do not show them rather than inventing any of it. Asked what changed on a loop,
+it quoted four availability transitions with their timestamps and before and
+after values.
+
+Deploying also exposed a real gap: the deployment serves the web app itself from
+a fixed list of page routes, and a new route added to the client answers 404
+until it is added there too. The list is now named and commented, and every page
+route was checked on the live deployment.
