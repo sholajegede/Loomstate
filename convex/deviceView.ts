@@ -13,7 +13,6 @@ import type { Id } from "./_generated/dataModel";
  * popup slow. The full history stays in the web app.
  */
 
-const LOOPS_PER_PAGE = 8;
 const ACTIVITY_LIMIT = 6;
 
 const loopShape = v.object({

@@ -39,6 +39,8 @@ export const claimApproval = internalMutation({
       inboxId: v.string(),
       inboxAddress: v.string(),
       ownerEmail: v.optional(v.string()),
+      notifyEmail: v.boolean(),
+      notifyBrowser: v.boolean(),
       reason: v.string(),
       riskLevel: v.string(),
       commitsMoney: v.boolean(),
@@ -77,6 +79,10 @@ export const claimApproval = internalMutation({
       inboxId: agent.inboxId,
       inboxAddress: agent.inboxAddress,
       ownerEmail: owner?.email,
+      // Absent means on, so a workspace that never opened settings is told
+      // through both channels exactly as before.
+      notifyEmail: workspace.notifyEmail !== false,
+      notifyBrowser: workspace.notifyBrowser !== false,
       reason: approval.reason,
       riskLevel: approval.riskLevel,
       commitsMoney: approval.commitsMoney,
@@ -226,19 +232,26 @@ export const announceApproval = internalAction({
     const channels: string[] = [];
 
     // Channel one: the extension raises a browser notification from this.
-    await ctx.runMutation(internal.notifications.enqueue, {
-      workspaceId: claim.workspaceId,
-      approvalId: args.approvalId,
-      loopId: claim.loopId,
-      title: `Approve: ${claim.loopTitle}`.slice(0, 90),
-      body: `${claim.subject} ${stakes}`.slice(0, 180),
-      url: link,
-    });
-    channels.push("a browser notification");
+    if (claim.notifyBrowser) {
+      await ctx.runMutation(internal.notifications.enqueue, {
+        workspaceId: claim.workspaceId,
+        approvalId: args.approvalId,
+        loopId: claim.loopId,
+        title: `Approve: ${claim.loopTitle}`.slice(0, 90),
+        body: `${claim.subject} ${stakes}`.slice(0, 180),
+        url: link,
+      });
+      channels.push("a browser notification");
+    }
 
     // Channel two: the agent writes to the owner from its own inbox.
     const key = process.env.AGENTMAIL_API_KEY;
-    if (key !== undefined && key !== "" && claim.ownerEmail !== undefined) {
+    if (
+      claim.notifyEmail &&
+      key !== undefined &&
+      key !== "" &&
+      claim.ownerEmail !== undefined
+    ) {
       const lines = [
         `Loomstate has an action waiting for you on the loop "${claim.loopTitle}".`,
         "",
@@ -272,7 +285,12 @@ export const announceApproval = internalAction({
       }
     }
 
-    const detail = `Loomstate told the owner through ${channels.join(" and ")}.`;
+    // An owner who turns both channels off still gets the audit entry, so the
+    // record never claims Loomstate told them when it did not.
+    const detail =
+      channels.length === 0
+        ? "Loomstate recorded this action. Every notification channel is off, so it told the owner nowhere."
+        : `Loomstate told the owner through ${channels.join(" and ")}.`;
     await ctx.runMutation(internal.notifications.recordAnnouncement, {
       workspaceId: claim.workspaceId,
       loopId: claim.loopId,

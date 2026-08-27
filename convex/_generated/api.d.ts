@@ -41,6 +41,7 @@ import type * as loops from "../loops.js";
 import type * as models from "../models.js";
 import type * as notifications from "../notifications.js";
 import type * as secrets from "../secrets.js";
+import type * as settings from "../settings.js";
 import type * as site from "../site.js";
 import type * as watches from "../watches.js";
 import type * as workspaces from "../workspaces.js";
@@ -85,6 +86,7 @@ declare const fullApi: ApiFromModules<{
   models: typeof models;
   notifications: typeof notifications;
   secrets: typeof secrets;
+  settings: typeof settings;
   site: typeof site;
   watches: typeof watches;
   workspaces: typeof workspaces;

@@ -71,6 +71,14 @@ export default defineSchema({
     chatEffort: v.optional(
       v.union(v.literal("low"), v.literal("medium"), v.literal("high")),
     ),
+    // The send backstop. Absent means the built-in limit, so a workspace that
+    // never touches these behaves exactly as it did before they existed.
+    sendCapLoopHourly: v.optional(v.number()),
+    sendCapLoopDaily: v.optional(v.number()),
+    sendCapWorkspaceHourly: v.optional(v.number()),
+    // Which channels an approval reaches the owner through. Absent means on.
+    notifyEmail: v.optional(v.boolean()),
+    notifyBrowser: v.optional(v.boolean()),
   }).index("by_owner", ["ownerId"]),
 
   /** Read-only watchers invited to a workspace. */

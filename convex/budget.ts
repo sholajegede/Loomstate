@@ -12,9 +12,31 @@ import type { Id } from "./_generated/dataModel";
  * credits or fill somebody's inbox, then hands the loop to a human.
  */
 
+/**
+ * The built-in limits. A workspace that has never set its own uses exactly
+ * these, so surfacing the setting changed nothing for anyone.
+ */
 export const LOOP_HOURLY_CAP = 3;
 export const LOOP_DAILY_CAP = 8;
 export const WORKSPACE_HOURLY_CAP = 8;
+
+/**
+ * What the owner may set. A backstop that can be turned off is not a backstop,
+ * so the range is generous but bounded at both ends.
+ */
+export const CAP_LIMITS = {
+  loopHourly: { min: 1, max: 25 },
+  loopDaily: { min: 1, max: 100 },
+  workspaceHourly: { min: 1, max: 60 },
+} as const;
+
+/** Keeps a chosen limit inside what Loomstate will honour. */
+export function clampCap(
+  value: number,
+  bounds: { min: number; max: number },
+): number {
+  return Math.min(bounds.max, Math.max(bounds.min, Math.round(value)));
+}
 
 function siteUrl(): string {
   return (process.env.SITE_URL ?? "").replace(/\/+$/, "");
@@ -57,6 +79,13 @@ export const checkAndReserve = internalMutation({
       };
     }
 
+    // The owner's own limits when they set them, the built-in ones otherwise.
+    const workspace = await ctx.db.get(loop.workspaceId);
+    const loopHourly = workspace?.sendCapLoopHourly ?? LOOP_HOURLY_CAP;
+    const loopDaily = workspace?.sendCapLoopDaily ?? LOOP_DAILY_CAP;
+    const workspaceHourly =
+      workspace?.sendCapWorkspaceHourly ?? WORKSPACE_HOURLY_CAP;
+
     const recentOnLoop = await ctx.db
       .query("messages")
       .withIndex("by_loop_time", (q) =>
@@ -66,19 +95,19 @@ export const checkAndReserve = internalMutation({
     const outboundDay = recentOnLoop.filter((m) => m.direction === "outbound");
     const outboundHour = outboundDay.filter((m) => m.sentAt >= now - HOUR_MS);
 
-    if (outboundHour.length >= LOOP_HOURLY_CAP) {
+    if (outboundHour.length >= loopHourly) {
       return await pauseLoop(
         ctx,
         args.loopId,
-        `Loomstate stopped this loop. The agent sent ${outboundHour.length} emails in an hour, which is over the limit of ${LOOP_HOURLY_CAP}.`,
+        `Loomstate stopped this loop. The agent sent ${outboundHour.length} emails in an hour, which is over the limit of ${loopHourly}.`,
       );
     }
 
-    if (outboundDay.length >= LOOP_DAILY_CAP) {
+    if (outboundDay.length >= loopDaily) {
       return await pauseLoop(
         ctx,
         args.loopId,
-        `Loomstate stopped this loop. The agent sent ${outboundDay.length} emails in a day, which is over the limit of ${LOOP_DAILY_CAP}.`,
+        `Loomstate stopped this loop. The agent sent ${outboundDay.length} emails in a day, which is over the limit of ${loopDaily}.`,
       );
     }
 
@@ -92,8 +121,8 @@ export const checkAndReserve = internalMutation({
       (m) => m.direction === "outbound",
     );
 
-    if (workspaceHour.length >= WORKSPACE_HOURLY_CAP) {
-      const reason = `Loomstate paused every loop. The agent sent ${workspaceHour.length} emails in an hour across this workspace, which is over the limit of ${WORKSPACE_HOURLY_CAP}.`;
+    if (workspaceHour.length >= workspaceHourly) {
+      const reason = `Loomstate paused every loop. The agent sent ${workspaceHour.length} emails in an hour across this workspace, which is over the limit of ${workspaceHourly}.`;
       await ctx.db.patch(loop.workspaceId, { autopilot: false });
       await ctx.db.insert("auditLog", {
         workspaceId: loop.workspaceId,

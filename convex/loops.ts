@@ -230,7 +230,15 @@ export const get = query({
   },
 });
 
-/** Sets how much the agent may do on this loop. */
+/**
+ * Sets how much the agent may do on this loop.
+ *
+ * The tier on the loop is what a new grant is written from, but a grant already
+ * live is what the agent actually reads before it sends. Changing the tier
+ * therefore retires a live grant that no longer matches, so the next run
+ * rebuilds authority at the level the owner just chose. Without that, lowering
+ * a loop would look like it applied and quietly not.
+ */
 export const setTier = mutation({
   args: { loopId: v.id("loops"), tier: autonomyTier },
   returns: v.null(),
@@ -238,14 +246,32 @@ export const setTier = mutation({
     const loop = await ctx.db.get(args.loopId);
     if (loop === null) throw new Error("Loop not found.");
     await requireWorkspaceWrite(ctx, loop.workspaceId);
+
+    const now = Date.now();
     await ctx.db.patch(args.loopId, { tier: args.tier });
+
+    let retired = 0;
+    for (const grant of await ctx.db
+      .query("grants")
+      .withIndex("by_loop", (q) => q.eq("loopId", args.loopId))
+      .take(20)) {
+      const live = grant.revokedAt === undefined && grant.expiresAt > now;
+      if (live && grant.tier !== args.tier) {
+        await ctx.db.patch(grant._id, { revokedAt: now });
+        retired += 1;
+      }
+    }
+
     await ctx.db.insert("auditLog", {
       workspaceId: loop.workspaceId,
       loopId: args.loopId,
       actorType: "user",
       action: "loop.setTier",
-      detail: `The owner set this loop to the ${args.tier} tier.`,
-      at: Date.now(),
+      detail:
+        retired === 0
+          ? `The owner set this loop to the ${args.tier} tier.`
+          : `The owner set this loop to the ${args.tier} tier, which retired the authority the agent held.`,
+      at: now,
     });
     return null;
   },
