@@ -309,6 +309,8 @@ export default defineSchema({
     decidedAt: v.optional(v.number()),
     decidedBy: v.optional(v.id("users")),
     editedPayload: v.optional(v.any()),
+    // Stamped once, so an approval is announced exactly one time.
+    notifiedAt: v.optional(v.number()),
   })
     .index("by_workspace_status", ["workspaceId", "status"])
     .index("by_loop", ["loopId"]),
@@ -348,6 +350,23 @@ export default defineSchema({
     hint: v.string(),
     updatedAt: v.number(),
   }).index("by_workspace_provider", ["workspaceId", "provider"]),
+
+  /**
+   * Things the owner must be told about, on whatever device they have. The
+   * extension drains this so a waiting approval reaches them with the app shut.
+   */
+  notifications: defineTable({
+    workspaceId: v.id("workspaces"),
+    approvalId: v.optional(v.id("approvals")),
+    loopId: v.optional(v.id("loops")),
+    title: v.string(),
+    body: v.string(),
+    url: v.string(),
+    createdAt: v.number(),
+    deliveredAt: v.optional(v.number()),
+  })
+    .index("by_workspace_delivered", ["workspaceId", "deliveredAt"])
+    .index("by_approval", ["approvalId"]),
 
   /** The built web app. Loomstate serves its own pages from this deployment. */
   siteAssets: defineTable({

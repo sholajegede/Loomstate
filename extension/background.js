@@ -1,6 +1,7 @@
 import { isReportableUrl } from "./exclusions.js";
 
 const FLUSH_ALARM = "loomstate-flush";
+const NOTIFY_PREFIX = "loomstate-approval-";
 const MIN_DWELL_MS = 4000;
 const MAX_BATCH = 50;
 
@@ -97,6 +98,51 @@ chrome.windows.onFocusChanged.addListener(async (windowId) => {
   }
 });
 
+/**
+ * Raises a browser notification for every action waiting on the person.
+ * Loomstate decides what is worth telling them; this only shows it. The
+ * service worker runs on its alarm, so this reaches them with every tab shut.
+ */
+async function pullNotifications() {
+  const { endpoint, token } = await settings();
+  if (endpoint === "" || token === "") return;
+
+  let payload;
+  try {
+    const response = await fetch(`${endpoint}/x/notifications`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) return;
+    payload = await response.json();
+  } catch {
+    return;
+  }
+
+  for (const item of payload.notifications ?? []) {
+    const id = `${NOTIFY_PREFIX}${item.id}`;
+    chrome.notifications.create(id, {
+      type: "basic",
+      iconUrl: chrome.runtime.getURL("icons/icon128.png"),
+      title: item.title,
+      message: item.body,
+      priority: 2,
+      requireInteraction: true,
+    });
+    // Remember where this notification points, so a click opens the right page.
+    await chrome.storage.local.set({ [id]: item.url });
+  }
+}
+
+chrome.notifications.onClicked.addListener(async (id) => {
+  if (!id.startsWith(NOTIFY_PREFIX)) return;
+  const stored = await chrome.storage.local.get(id);
+  const url = stored[id];
+  if (url) await chrome.tabs.create({ url });
+  chrome.notifications.clear(id);
+  await chrome.storage.local.remove(id);
+});
+
 chrome.alarms.create(FLUSH_ALARM, { periodInMinutes: 0.5 });
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name !== FLUSH_ALARM) return;
@@ -113,6 +159,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     });
   }
   await flush();
+  await pullNotifications();
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {

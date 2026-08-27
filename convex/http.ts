@@ -35,6 +35,7 @@ const preflight = httpAction(async () => new Response(null, { status: 204, heade
 
 http.route({ path: "/x/events", method: "OPTIONS", handler: preflight });
 http.route({ path: "/x/state", method: "OPTIONS", handler: preflight });
+http.route({ path: "/x/notifications", method: "OPTIONS", handler: preflight });
 
 /** The extension posts browsing events here. */
 http.route({
@@ -84,6 +85,40 @@ http.route({
       workspaceId: device.workspaceId,
     });
     return json(state);
+  }),
+});
+
+/**
+ * The extension drains waiting notifications here and raises each one as a
+ * browser notification. Loomstate marks them delivered so they show once.
+ */
+http.route({
+  path: "/x/notifications",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const auth = await resolveDevice(request);
+    if (auth === null) return json({ error: "Missing device token." }, 401);
+
+    const device = await ctx.runQuery(internal.ingest.deviceByTokenHash, auth);
+    if (device === null) return json({ error: "Unknown or stopped device." }, 401);
+
+    const pending = await ctx.runQuery(internal.notifications.pendingFor, {
+      workspaceId: device.workspaceId,
+    });
+    if (pending.length > 0) {
+      await ctx.runMutation(internal.notifications.markDelivered, {
+        ids: pending.map((n) => n._id),
+      });
+    }
+
+    return json({
+      notifications: pending.map((n) => ({
+        id: n._id,
+        title: n.title,
+        body: n.body,
+        url: n.url,
+      })),
+    });
   }),
 });
 

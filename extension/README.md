@@ -33,6 +33,16 @@ server checks the same list a second time.
 The popup then shows how many loops are active and how many actions wait for
 your approval.
 
+## Approval alerts
+
+Loomstate works your loops on a schedule, so an action can come up while the app
+is shut. When one needs your decision, the extension raises a browser
+notification. Select it to open the approval. Loomstate also emails you from the
+agent's own inbox, so the alert reaches you even with the browser closed.
+
+Chrome asks for notification permission the first time. The extension shows each
+approval once.
+
 ## Stop it
 
 Select **Pause capture** in the popup to stop reporting. Select **Stop** next to

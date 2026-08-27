@@ -3,9 +3,19 @@
   "name": "Loomstate",
   "version": "0.1.0",
   "description": "Streams your browsing signal to Loomstate so it can rebuild the goals you never closed.",
-  "permissions": ["tabs", "storage", "alarms"],
-  "host_permissions": ["https://*.convex.site/*"],
-  "background": { "service_worker": "background.js", "type": "module" },
+  "permissions": [
+    "tabs",
+    "storage",
+    "alarms",
+    "notifications"
+  ],
+  "host_permissions": [
+    "https://*.convex.site/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
   "action": {
     "default_popup": "popup.html",
     "default_title": "Loomstate",

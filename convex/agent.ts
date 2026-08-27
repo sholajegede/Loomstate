@@ -373,6 +373,12 @@ export const queueApproval = internalMutation({
       evidence: args.evidence,
       at: now,
     });
+
+    // Only an approval reaches the owner. An action the agent may take by
+    // itself never does, because nothing is waiting on them.
+    await ctx.scheduler.runAfter(0, internal.notifications.announceApproval, {
+      approvalId,
+    });
     return approvalId;
   },
 });
