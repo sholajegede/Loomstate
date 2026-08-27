@@ -18,6 +18,7 @@ import type * as blocklist from "../blocklist.js";
 import type * as budget from "../budget.js";
 import type * as chat from "../chat.js";
 import type * as crons from "../crons.js";
+import type * as deviceView from "../deviceView.js";
 import type * as devices from "../devices.js";
 import type * as email from "../email.js";
 import type * as events from "../events.js";
@@ -61,6 +62,7 @@ declare const fullApi: ApiFromModules<{
   budget: typeof budget;
   chat: typeof chat;
   crons: typeof crons;
+  deviceView: typeof deviceView;
   devices: typeof devices;
   email: typeof email;
   events: typeof events;

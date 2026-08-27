@@ -44,6 +44,8 @@ http.route({ path: "/x/state", method: "OPTIONS", handler: preflight });
 http.route({ path: "/x/notifications", method: "OPTIONS", handler: preflight });
 http.route({ path: "/x/approvals", method: "OPTIONS", handler: preflight });
 http.route({ path: "/x/decide", method: "OPTIONS", handler: preflight });
+http.route({ path: "/x/overview", method: "OPTIONS", handler: preflight });
+http.route({ path: "/x/capture", method: "OPTIONS", handler: preflight });
 
 /** The extension posts browsing events here. */
 http.route({
@@ -131,6 +133,89 @@ http.route({
         loopTitle: n.loopTitle,
       })),
     });
+  }),
+});
+
+/** Everything the extension shows, in one bounded read. */
+http.route({
+  path: "/x/overview",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const auth = await resolveDevice(request);
+    if (auth === null) return json({ error: "Missing device token." }, 401);
+    const device = await ctx.runQuery(internal.ingest.deviceByTokenHash, auth);
+    if (device === null) return json({ error: "Unknown or stopped device." }, 401);
+
+    let body: { cursor?: string | null; numItems?: number } = {};
+    try {
+      body = await request.json();
+    } catch {
+      // An empty body means the first page.
+    }
+
+    const overview = await ctx.runQuery(internal.deviceView.overview, {
+      workspaceId: device.workspaceId,
+      paginationOpts: {
+        cursor: typeof body.cursor === "string" ? body.cursor : null,
+        numItems: Math.min(Math.max(body.numItems ?? 8, 1), 25),
+      },
+    });
+    const approvals = await ctx.runQuery(internal.approvals.pendingForDevice, {
+      workspaceId: device.workspaceId,
+    });
+
+    return json({ ...overview, approvals, appUrl: appOrigin() });
+  }),
+});
+
+/** The loops a captured page can be filed under. */
+http.route({
+  path: "/x/capture",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const auth = await resolveDevice(request);
+    if (auth === null) return json({ error: "Missing device token." }, 401);
+    const device = await ctx.runQuery(internal.ingest.deviceByTokenHash, auth);
+    if (device === null) return json({ error: "Unknown or stopped device." }, 401);
+
+    let body: {
+      url?: string;
+      title?: string;
+      loopId?: string;
+      newLoopTitle?: string;
+      list?: boolean;
+    };
+    try {
+      body = await request.json();
+    } catch {
+      return json({ error: "Body must be JSON." }, 400);
+    }
+
+    // Asking what loops exist, rather than filing anything yet.
+    if (body.list === true) {
+      const loops = await ctx.runQuery(internal.deviceView.loopChoices, {
+        workspaceId: device.workspaceId,
+      });
+      return json({ loops });
+    }
+
+    if (typeof body.url !== "string" || body.url === "") {
+      return json({ error: "Name the page to add." }, 400);
+    }
+
+    const result = await ctx.runMutation(internal.deviceView.capture, {
+      workspaceId: device.workspaceId,
+      deviceId: device.deviceId,
+      url: body.url,
+      title: typeof body.title === "string" ? body.title : "",
+      loopId:
+        typeof body.loopId === "string"
+          ? (body.loopId as Id<"loops">)
+          : undefined,
+      newLoopTitle:
+        typeof body.newLoopTitle === "string" ? body.newLoopTitle : undefined,
+    });
+    return json(result);
   }),
 });
 

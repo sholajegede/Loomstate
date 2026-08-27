@@ -11,12 +11,9 @@
       <span id="status" class="status">Not paired</span>
     </header>
 
-    <section id="counts" class="counts hidden">
-      <p><strong id="loopCount">0</strong> loops active</p>
-      <p><strong id="approvalCount">0</strong> need approval</p>
-    </section>
-
-    <section id="approvals" class="approvals hidden"></section>
+    <p id="paused" class="banner hidden">
+      Loomstate is paused. It captures browsing but does no work.
+    </p>
 
     <section id="pairing" class="pairing">
       <label for="endpoint">Loomstate address</label>
@@ -26,10 +23,39 @@
       <button id="save">Pair this browser</button>
     </section>
 
+    <section id="capture" class="capture hidden">
+      <button id="captureToggle" class="ghost">Add this page to a loop</button>
+      <div id="captureForm" class="hidden">
+        <p id="capturePage" class="page"></p>
+        <label for="loopPick">Add to</label>
+        <select id="loopPick"></select>
+        <input id="loopName" class="hidden" type="text" placeholder="Name this loop" />
+        <div class="row">
+          <button id="captureGo">Add</button>
+          <button id="captureCancel" class="ghost">Cancel</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="approvals" class="approvals hidden"></section>
+
+    <section id="loopsBlock" class="block hidden">
+      <p class="blockTitle">Loops <span id="loopCount" class="muted"></span></p>
+      <div id="loops"></div>
+      <button id="moreLoops" class="ghost hidden">Show more</button>
+    </section>
+
+    <section id="activityBlock" class="block hidden">
+      <p class="blockTitle">Recent</p>
+      <div id="activity"></div>
+    </section>
+
     <section class="controls">
       <button id="pause" class="ghost">Pause capture</button>
-      <button id="dashboard" class="ghost">Open dashboard</button>
+      <button id="dashboard" class="ghost">Open Loomstate</button>
     </section>
+
+    <button id="dock" class="ghost wide">Keep this open while I browse</button>
 
     <p id="message" class="message"></p>
   </body>

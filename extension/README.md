@@ -30,8 +30,25 @@ server checks the same list a second time.
 3. Open the Loomstate extension popup.
 4. Paste both values and select **Pair this browser**.
 
-The popup then shows how many loops are active and how many actions wait for
-your approval.
+## What it shows
+
+Open the extension and you see, without opening the web app:
+
+- anything waiting for your decision, which you can answer here
+- your loops, with status and how live each one is
+- what the agent has just done
+- whether Loomstate is paused
+
+Select a loop to open it in the web app. Select **Keep this open while I
+browse** to move the panel to the side of the window, where it stays as you
+work.
+
+## Adding a page
+
+Select **Add this page to a loop** to file the page you are on. Choose an
+existing loop, or name a new one. Loomstate stores the page and starts watching
+it, unless it is on your excluded list, in which case it stores nothing and says
+so.
 
 ## Approval alerts
 
