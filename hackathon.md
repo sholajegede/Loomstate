@@ -8,11 +8,11 @@
 - **Frontend:** Convex static hosting
 - **Convex deployment:** https://incredible-sardine-959.convex.cloud
 - **Components:** none
-- **Convex features:** schema, tables, indexes, queries, mutations, actions, internal functions, HTTP actions, crons, scheduled functions, file storage, realtime queries
+- **Convex features:** schema, tables, indexes, full-text search, paginated queries, queries, mutations, actions, internal functions, HTTP actions, crons, scheduled functions, file storage, realtime queries
 - **Auth:** Convex Auth
 - **AI models:** gpt-5-mini, with gpt-4.1-mini and gpt-4o-mini as fallbacks
 - **Started:** 2026-08-26T21:21:20Z
-- **Last updated:** 2026-08-27T04:45:00Z
+- **Last updated:** 2026-08-27T05:10:00Z
 
 ## Log
 
@@ -306,3 +306,24 @@ three browsing events respectively were detached rather than deleted. A scan of
 both databases for the test artifacts now returns nothing in messages, audit
 entries, approvals, or notifications, and neither deployment holds any email at
 all.
+
+### 2026-08-27 - 01f7488
+Two read surfaces over data that already existed. Neither touches the agent, the
+crons, or the send path.
+
+The nav now carries every loop, finished ones included. It searches titles
+through a Convex full-text index and filters by status, type, and aliveness, with
+live counts per status. Reads are paginated and always enter through an index:
+the search index when there is a term, the status or type index when one is
+picked, and the activity index otherwise. Filters an index cannot carry are
+applied to the page that was already fetched, so the read stays bounded whatever
+is selected.
+
+The audit view reads the same log under two lenses. Aggregate shows every agent
+as one history through the workspace index. Per-agent shows one agent's own
+history through an index on the agent. Both filter by loop, action, and time, and
+each entry carries the provenance already recorded: which grant authorised it and
+when that grant expires, the Firecrawl evidence with its before and after, the
+email body, and a link to the loop. The view only reads
+(`convex/loops.ts`, `convex/auditLog.ts`, `src/components/LoopsSidebar.tsx`,
+`src/routes/AuditLog.tsx`).
