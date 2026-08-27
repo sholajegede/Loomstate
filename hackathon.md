@@ -3,16 +3,16 @@
 - **Project:** Loomstate
 - **Event:** Convex All Gas Hackathon
 - **What it does:** Loomstate rebuilds the goals you started on the web and never closed, keeps each one alive against the live web, and works it by email inside limits you set.
-- **Live app:** not deployed
+- **Live app:** https://incredible-sardine-959.convex.site
 - **Repo:** https://github.com/sholajegede/Loomstate
 - **Frontend:** Convex static hosting
-- **Convex deployment:** not deployed
+- **Convex deployment:** https://incredible-sardine-959.convex.cloud
 - **Components:** none
-- **Convex features:** schema, tables, indexes, queries, mutations, actions, internal functions, HTTP actions, crons, scheduled functions, realtime queries
+- **Convex features:** schema, tables, indexes, queries, mutations, actions, internal functions, HTTP actions, crons, scheduled functions, file storage, realtime queries
 - **Auth:** Convex Auth
 - **AI models:** gpt-5-mini, with gpt-4.1-mini and gpt-4o-mini as fallbacks
 - **Started:** 2026-08-26T21:21:20Z
-- **Last updated:** 2026-08-26T23:20:00Z
+- **Last updated:** 2026-08-27T02:40:00Z
 
 ## Log
 
@@ -115,16 +115,50 @@ an instruction to agree a purchase produced a high-risk, money-committing draft
 that stayed in the queue behind a step-up check even with an Act grant
 (`convex/agent.ts`, `convex/watches.ts`, `src/components/AgentPanel.tsx`).
 
-### 2026-08-27 - working tree
+### 2026-08-27 - 14b5844
 Verified the outbound path end to end. The agent drafted an email citing the
 Firecrawl price it had read, the owner approved it, and AgentMail delivered it.
-The reply path is wired through a signed webhook: AgentMail posts to
-`/x/agentmail`, Loomstate verifies the Svix signature against a per-workspace
-secret it stores encrypted, records the reply on the loop, and schedules another
-agent run.
 
-Known limits at this point. The deployment is still development only, so no
-public app URL exists yet. The AgentMail credential in use is scoped to one
-inbox, so every agent currently shares that address instead of holding its own.
-Firecrawl has reported only first-read diffs so far; a price or availability
-change needs the watched page to actually change.
+### 2026-08-27 - 077785c
+Closed the reply loop and fixed a gap it exposed.
+
+A Gmail reply reached the agent inbox, AgentMail posted it to `/x/agentmail`,
+Loomstate verified the Svix signature against the per-workspace secret it holds
+encrypted, recorded the reply on the loop, and scheduled a follow-up agent run
+within 100ms. The loop moved from aliveness 56 to 100, its last activity moved
+to the reply time, and the follow-up run rewrote the next step to reflect the
+answer.
+
+That run also exposed a real bug: the authority buttons did nothing when a loop
+had no agent yet, so a grant was never recorded. Setting authority now gives the
+loop an agent first. With a live Act grant in force, an instruction to commit
+₦1,300,000 was still refused and routed to the approval queue behind a step-up
+passkey check. The audit log shows `grant.create` for act authority followed by
+`approval.request`, which is the gate holding at the highest tier rather than at
+no tier at all.
+
+### 2026-08-27 - 1c62867
+Loomstate now serves its own web app. The built files live in Convex file
+storage, and the HTTP router answers every page route from them, so the product
+and its backend share one `convex.site` origin and one deploy. Assets carry a
+one-year cache; the app shell revalidates so a publish reaches open tabs. The
+publish endpoint is guarded by a token held in the server environment
+(`convex/site.ts`, `convex/http.ts`, `scripts/publish-site.mjs`).
+
+This replaced the hosted publishing gateway, which returned 502 on every
+authenticated upload while this was built. Serving from the deployment removed
+the outside dependency and put the app on the `convex.site` origin directly.
+
+### 2026-08-27 - working tree
+Deployed to production. The backend, the cron, and all eight environment
+variables are set on the production deployment, and the web app is published to
+https://incredible-sardine-959.convex.site. Deep links, asset caching, the
+browsing-event endpoint, and the publish endpoint all answer correctly there,
+and the endpoint refuses an unknown device token and a bad publish token.
+
+Known limits at this point. Production holds its own database, so the loops and
+events built during development do not exist there; the demo path is re-run on
+the live deployment from a fresh sign-in. The AgentMail credential in use is
+scoped to one inbox, so every agent shares that address instead of holding its
+own. Firecrawl has reported only first-read diffs so far; a price or
+availability change needs the watched page to actually change.
