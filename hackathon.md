@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5-mini by default, with gpt-4.1-mini and gpt-4o-mini as fallbacks. The chat model is chosen by the owner from what their own key reaches.
 - **Started:** 2026-08-26T21:21:20Z
-- **Last updated:** 2026-08-27T22:00:00Z
+- **Last updated:** 2026-08-27T22:15:00Z
 
 ## Log
 
@@ -493,3 +493,35 @@ Confirmed on the live deployment: all five settings functions are public,
 none takes a workspace or user id, and every one refuses an unauthenticated
 caller with "Not signed in."; the whole surface renders with real values;
 asking for a limit of 9999 an hour was clamped to 25 and audited as 25.
+
+### 2026-08-27 - first run
+A new account used to land in an empty app that quietly did nothing, because
+Loomstate cannot rebuild a loop without a key and sees nothing without a paired
+browser. Setup now walks the owner through the three things that make it work:
+the OpenAI key first, because nothing runs without it, then the browser, then
+how much the agent may do, with draft recommended.
+
+Each step reports what is actually true rather than whether a button was
+pressed. The key step reads whether a key is stored, the browser step reads
+whether a browser is paired and whether it has reported yet, and the tier step
+reads the standing setting. Leaving halfway and coming back therefore shows
+exactly what is still missing, and the browser step ticks itself the moment
+pairing succeeds.
+
+Every step can be left for later. Skipping stops setup opening on its own, but
+it does not strand anyone: until a key exists the intent map explains what is
+missing and links back, rather than showing an empty loop screen. Once the key
+is in and the first pages arrive, the ordinary empty state takes over and says
+which of the two is still pending (`convex/setup.ts`, `src/routes/Setup.tsx`,
+`src/routes/IntentMap.tsx`).
+
+Building it turned up a case worth handling. A workspace that predates setup
+already has a key and a browser, so opening setup at it would interrupt someone
+who needs nothing. Setup opens on its own only when the workspace is not already
+working.
+
+Confirmed on the live deployment: the rule was replayed over six account shapes
+and behaved correctly in each, including a skipped account, which stops the
+prompt but still sees the explanation on the main view; the flow renders against
+real state, showing the key as saved and the browser as paired and reporting;
+and finishing it recorded `workspace.setupComplete` and returned to the app.
