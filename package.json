@@ -9,7 +9,8 @@
     "dev:backend": "convex dev",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "lint": "tsc -b --noEmit"
+    "lint": "tsc -b --noEmit",
+    "publish": "node scripts/publish-site.mjs"
   },
   "dependencies": {
     "@auth/core": "^0.41.1",

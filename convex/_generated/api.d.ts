@@ -32,6 +32,7 @@ import type * as lib_openai from "../lib/openai.js";
 import type * as lib_url from "../lib/url.js";
 import type * as loops from "../loops.js";
 import type * as secrets from "../secrets.js";
+import type * as site from "../site.js";
 import type * as watches from "../watches.js";
 import type * as workspaces from "../workspaces.js";
 
@@ -66,6 +67,7 @@ declare const fullApi: ApiFromModules<{
   "lib/url": typeof lib_url;
   loops: typeof loops;
   secrets: typeof secrets;
+  site: typeof site;
   watches: typeof watches;
   workspaces: typeof workspaces;
 }>;

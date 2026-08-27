@@ -337,6 +337,15 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_workspace_provider", ["workspaceId", "provider"]),
 
+  /** The built web app. Loomstate serves its own pages from this deployment. */
+  siteAssets: defineTable({
+    path: v.string(),
+    storageId: v.id("_storage"),
+    contentType: v.string(),
+    size: v.number(),
+    updatedAt: v.number(),
+  }).index("by_path", ["path"]),
+
   /** Domains the extension must never report. Enforced in the browser too. */
   blocklist: defineTable({
     workspaceId: v.id("workspaces"),

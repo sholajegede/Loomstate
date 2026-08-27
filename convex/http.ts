@@ -165,4 +165,86 @@ http.route({
   }),
 });
 
+// --- the web app ----------------------------------------------------------
+
+/** Reads one built file out of storage. Falls back to the app shell. */
+function servePath(useAppShell: boolean) {
+  return httpAction(async (ctx, request) => {
+    const path = new URL(request.url).pathname;
+    const direct = await ctx.runQuery(internal.site.readAsset, { path });
+    const asset =
+      direct ??
+      (useAppShell
+        ? await ctx.runQuery(internal.site.readAsset, { path: "/index.html" })
+        : null);
+
+    if (asset === null) {
+      return new Response("Not found.", {
+        status: 404,
+        headers: { "Content-Type": "text/plain" },
+      });
+    }
+
+    const file = await ctx.storage.get(asset.storageId);
+    if (file === null) {
+      return new Response("The web app is not published yet.", {
+        status: 503,
+        headers: { "Content-Type": "text/plain" },
+      });
+    }
+
+    // Vite puts a content hash in every asset name, so those never change under
+    // one URL. The app shell must stay fresh so a publish reaches open tabs.
+    const immutable = path.startsWith("/assets/") && direct !== null;
+    return new Response(file, {
+      headers: {
+        "Content-Type": asset.contentType,
+        "Cache-Control": immutable
+          ? "public, max-age=31536000, immutable"
+          : "public, max-age=0, must-revalidate",
+      },
+    });
+  });
+}
+
+/** Receives the built files on publish. The token lives in the server env. */
+http.route({
+  path: "/x/site-upload",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const expected = process.env.SITE_UPLOAD_TOKEN;
+    if (expected === undefined || expected === "") {
+      return json({ error: "Publishing is not enabled on this deployment." }, 403);
+    }
+    const header = request.headers.get("Authorization") ?? "";
+    if (header !== `Bearer ${expected}`) {
+      return json({ error: "Bad publish token." }, 401);
+    }
+
+    const path = request.headers.get("x-asset-path") ?? "";
+    if (!path.startsWith("/")) {
+      return json({ error: "x-asset-path must start with a slash." }, 400);
+    }
+
+    const blob = await request.blob();
+    const storageId = await ctx.storage.store(blob);
+    await ctx.runMutation(internal.site.putAsset, {
+      path,
+      storageId,
+      contentType:
+        request.headers.get("x-asset-type") ?? "application/octet-stream",
+      size: blob.size,
+    });
+    return json({ path, size: blob.size });
+  }),
+});
+
+// The app shell answers every page route. Assets answer only their own path.
+for (const path of ["/", "/signal", "/approvals", "/audit", "/settings"]) {
+  http.route({ path, method: "GET", handler: servePath(true) });
+}
+http.route({ pathPrefix: "/loops/", method: "GET", handler: servePath(true) });
+http.route({ pathPrefix: "/assets/", method: "GET", handler: servePath(false) });
+http.route({ path: "/loom.svg", method: "GET", handler: servePath(false) });
+
 export default http;
