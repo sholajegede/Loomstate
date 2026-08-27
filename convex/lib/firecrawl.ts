@@ -92,3 +92,23 @@ export function normalize(markdown: string): string {
     .trim()
     .slice(0, 200_000);
 }
+
+/**
+ * Two prices that differ only in spacing are the same price. Comparing the raw
+ * strings reports a change every time a site reflows its markup, which would
+ * wake the agent for nothing.
+ */
+export function samePrice(a: string | undefined, b: string | undefined): boolean {
+  return normalizeField(a) === normalizeField(b);
+}
+
+/** Strips spacing and case so two renderings of one value compare equal. */
+export function normalizeField(value: string | undefined): string | null {
+  if (value === undefined) return null;
+  const clean = value
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, "")
+    .trim()
+    .toLowerCase();
+  return clean === "" ? null : clean;
+}

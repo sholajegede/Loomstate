@@ -11,7 +11,7 @@ import { internal } from "./_generated/api";
 import type { ActionCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireDocIn, requireSession, requireWorkspaceWrite } from "./lib/access";
-import { normalize, scrape } from "./lib/firecrawl";
+import { normalize, normalizeField, samePrice, scrape } from "./lib/firecrawl";
 import { findContactEmail } from "./lib/url";
 import { askForJson } from "./lib/openai";
 import { sha256Hex } from "./lib/hash";
@@ -550,7 +550,7 @@ export const sweepOne = internalAction({
         }`,
       });
     } else {
-      if ((previous.price ?? null) !== (facts.price ?? null)) {
+      if (!samePrice(previous.price, facts.price ?? undefined)) {
         changes.push({
           kind: "price",
           field: "price",
@@ -564,7 +564,10 @@ export const sweepOne = internalAction({
                 : `The price on ${watch.label} moved from ${previous.price} to ${facts.price}.`,
         });
       }
-      if ((previous.availability ?? "unknown") !== facts.availability) {
+      if (
+        normalizeField(previous.availability ?? "unknown") !==
+        normalizeField(facts.availability)
+      ) {
         changes.push({
           kind: "availability",
           field: "availability",
