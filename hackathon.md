@@ -153,11 +153,13 @@ authenticated upload while this was built. Serving from the deployment removed
 the outside dependency and put the app on the `convex.site` origin directly.
 
 ### 2026-08-27 - working tree
-Deployed to production. The backend, the cron, and all eight environment
-variables are set on the production deployment, and the web app is published to
+Deployed to production. The backend and all nine environment variables are set
+on the production deployment, and the web app is published to
 https://incredible-sardine-959.convex.site. Deep links, asset caching, the
 browsing-event endpoint, and the publish endpoint all answer correctly there,
-and the endpoint refuses an unknown device token and a bad publish token.
+and each endpoint refuses an unknown token. The scheduled sweep was observed
+running on production, and the passkey endpoints answered a real sign-in
+challenge from the live page.
 
 Known limits at this point. Production holds its own database, so the loops and
 events built during development do not exist there; the demo path is re-run on
