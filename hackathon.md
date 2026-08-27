@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5-mini by default, with gpt-4.1-mini and gpt-4o-mini as fallbacks. The chat model is chosen by the owner from what their own key reaches.
 - **Started:** 2026-08-26T21:21:20Z
-- **Last updated:** 2026-08-27T22:15:00Z
+- **Last updated:** 2026-08-27T22:35:00Z
 
 ## Log
 
@@ -525,3 +525,27 @@ and behaved correctly in each, including a skipped account, which stops the
 prompt but still sees the explanation on the main view; the flow renders against
 real state, showing the key as saved and the browser as paired and reporting;
 and finishing it recorded `workspace.setupComplete` and returned to the app.
+
+### 2026-08-27 - the loading mark
+Every wait in the app said "Loading" in grey text. It now shows the logo
+weaving itself.
+
+The mark is a loom: amber warp threads held taut, teal weft carried across
+them. So the animation is the weft being drawn through, one row after another
+on a short stagger, which is the thing the product is named for rather than a
+spinner borrowed from somewhere else. It is a stroke-dash animation on the same
+three paths the logo already draws, so it costs three keyframe rules and no
+dependency at all: the whole change added under half a kilobyte to the bundle.
+
+Someone who has asked their system for less motion gets the mark held still,
+and every instance announces itself politely to a screen reader rather than
+silently swapping text for a picture.
+
+Ten waits across nine files use it: signing in, preparing a workspace, and each
+page, list, and chat, with a smaller version for a list fetching its next page
+(`src/components/Loading.tsx`, `src/index.css`).
+
+Confirmed on the live deployment by reading back what the browser actually
+applied: four animations running, `loom-weave` over 1.8s with the rows offset
+by 0 and 0.2 and 0.4 seconds, and the dash offset sampled travelling the full
+distance from one side to the other and out again.
