@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import {
   action,
@@ -56,6 +57,132 @@ export const list = query({
     return loops
       .sort((a, b) => b.aliveness - a.aliveness)
       .map(publicLoop);
+  },
+});
+
+const listItem = v.object({
+  _id: v.id("loops"),
+  title: v.string(),
+  type: loopType,
+  status: loopStatus,
+  aliveness: v.number(),
+  nextStep: v.string(),
+  lastActivityAt: v.number(),
+  blockedReason: v.optional(v.string()),
+  agentPausedAt: v.optional(v.number()),
+});
+
+/**
+ * A page of loops for the sidebar, including the ones that are finished. The
+ * index narrows the read before anything is loaded, so the query never grows
+ * with the size of the workspace.
+ */
+export const page = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+    search: v.optional(v.string()),
+    status: v.optional(loopStatus),
+    type: v.optional(loopType),
+    minAliveness: v.optional(v.number()),
+  },
+  returns: v.object({
+    page: v.array(listItem),
+    isDone: v.boolean(),
+    continueCursor: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const { workspace } = await requireSession(ctx);
+    const term = (args.search ?? "").trim();
+
+    const result =
+      term !== ""
+        ? await ctx.db
+            .query("loops")
+            .withSearchIndex("search_title", (q) => {
+              let search = q
+                .search("title", term)
+                .eq("workspaceId", workspace._id);
+              if (args.status !== undefined) search = search.eq("status", args.status);
+              if (args.type !== undefined) search = search.eq("type", args.type);
+              return search;
+            })
+            .paginate(args.paginationOpts)
+        : args.status !== undefined
+          ? await ctx.db
+              .query("loops")
+              .withIndex("by_workspace_status", (q) =>
+                q.eq("workspaceId", workspace._id).eq("status", args.status!),
+              )
+              .order("desc")
+              .paginate(args.paginationOpts)
+          : args.type !== undefined
+            ? await ctx.db
+                .query("loops")
+                .withIndex("by_workspace_type", (q) =>
+                  q.eq("workspaceId", workspace._id).eq("type", args.type!),
+                )
+                .order("desc")
+                .paginate(args.paginationOpts)
+            : await ctx.db
+                .query("loops")
+                .withIndex("by_workspace_activity", (q) =>
+                  q.eq("workspaceId", workspace._id),
+                )
+                .order("desc")
+                .paginate(args.paginationOpts);
+
+    // Refinements the index could not carry are applied to the page only, so
+    // the read stays bounded whatever the filters are.
+    const floor = args.minAliveness ?? 0;
+    const refined = result.page.filter(
+      (loop) =>
+        loop.aliveness >= floor &&
+        (args.type === undefined || term !== "" || loop.type === args.type) &&
+        (args.status === undefined || term !== "" || loop.status === args.status),
+    );
+
+    return {
+      page: refined.map((loop) => ({
+        _id: loop._id,
+        title: loop.title,
+        type: loop.type,
+        status: loop.status,
+        aliveness: loop.aliveness,
+        nextStep: loop.nextStep,
+        lastActivityAt: loop.lastActivityAt,
+        blockedReason: loop.blockedReason,
+        agentPausedAt: loop.agentPausedAt,
+      })),
+      isDone: result.isDone,
+      continueCursor: result.continueCursor,
+    };
+  },
+});
+
+/** How many loops sit in each status. The sidebar shows these as counts. */
+export const statusCounts = query({
+  args: {},
+  returns: v.object({
+    active: v.number(),
+    stalled: v.number(),
+    dormant: v.number(),
+    closed: v.number(),
+    total: v.number(),
+  }),
+  handler: async (ctx) => {
+    const { workspace } = await requireSession(ctx);
+    const counts = { active: 0, stalled: 0, dormant: 0, closed: 0, total: 0 };
+    for (const status of ["active", "stalled", "dormant", "closed"] as const) {
+      const rows = await ctx.db
+        .query("loops")
+        .withIndex("by_workspace_status", (q) =>
+          q.eq("workspaceId", workspace._id).eq("status", status),
+        )
+        .take(200);
+      counts[status] = rows.length;
+      counts.total += rows.length;
+    }
+    return counts;
   },
 });
 

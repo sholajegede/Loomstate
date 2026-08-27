@@ -156,8 +156,14 @@ export default defineSchema({
   })
     .index("by_workspace", ["workspaceId"])
     .index("by_workspace_status", ["workspaceId", "status"])
+    .index("by_workspace_type", ["workspaceId", "type"])
     .index("by_workspace_activity", ["workspaceId", "lastActivityAt"])
-    .index("by_status_worked", ["status", "lastWorkedAt"]),
+    .index("by_workspace_aliveness", ["workspaceId", "aliveness"])
+    .index("by_status_worked", ["status", "lastWorkedAt"])
+    .searchIndex("search_title", {
+      searchField: "title",
+      filterFields: ["workspaceId", "status", "type"],
+    }),
 
   /** A Firecrawl target that keeps one loop alive against the live web. */
   watches: defineTable({
@@ -346,7 +352,9 @@ export default defineSchema({
     at: v.number(),
   })
     .index("by_workspace_time", ["workspaceId", "at"])
-    .index("by_loop_time", ["loopId", "at"]),
+    .index("by_loop_time", ["loopId", "at"])
+    .index("by_agent_time", ["agentId", "at"])
+    .index("by_workspace_action", ["workspaceId", "action"]),
 
   /** BYOK material. Encrypted server-side. Never sent to the extension. */
   secrets: defineTable({

@@ -18,6 +18,7 @@ import AuditLog from "./routes/AuditLog";
 import Settings from "./routes/Settings";
 import Signal from "./routes/Signal";
 import SignIn from "./routes/SignIn";
+import { LoopsSidebar } from "./components/LoopsSidebar";
 
 const nav = [
   { to: "/", label: "Intent map", icon: MapIcon, end: true },
@@ -91,7 +92,7 @@ function Sidebar({
   const pending = useQuery(api.approvals.pendingCount) ?? 0;
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-r border-ink-800 bg-ink-900/60 px-3 py-5">
+    <aside className="flex h-full w-72 shrink-0 flex-col border-r border-ink-800 bg-ink-900/60 px-3 py-5">
       <div className="mb-7 flex items-center gap-2.5 px-2">
         <LoomMark />
         <div className="min-w-0">
@@ -126,7 +127,9 @@ function Sidebar({
         ))}
       </nav>
 
-      <div className="mt-auto space-y-2">
+      <LoopsSidebar />
+
+      <div className="mt-4 shrink-0 space-y-2 border-t border-ink-800 pt-3">
         <p className="truncate px-2 text-[11px] text-ink-400">{email ?? "Signed in"}</p>
         <button
           onClick={() => void signOut()}
