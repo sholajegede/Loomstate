@@ -172,6 +172,7 @@ export const reject = mutation({
       status: "rejected",
       decidedAt: now,
       decidedBy: user._id,
+      decidedVia: "web",
     });
     await ctx.db.insert("auditLog", {
       workspaceId: approval.workspaceId,
@@ -224,13 +225,21 @@ export const readForSend = internalQuery({
 });
 
 export const markApproved = internalMutation({
-  args: { approvalId: v.id("approvals") },
+  args: {
+    approvalId: v.id("approvals"),
+    via: v.optional(v.union(v.literal("web"), v.literal("extension"))),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
     const approval = await ctx.db.get(args.approvalId);
     if (approval === null) return null;
     const now = Date.now();
-    await ctx.db.patch(args.approvalId, { status: "approved", decidedAt: now });
+    await ctx.db.patch(args.approvalId, {
+      status: "approved",
+      decidedAt: now,
+      // Where the person actually released it, not where they typed a note.
+      decidedVia: args.via ?? "web",
+    });
     await ctx.db.insert("auditLog", {
       workspaceId: approval.workspaceId,
       loopId: approval.loopId,
@@ -273,7 +282,10 @@ export const assertOwner = internalQuery({
  * without checking first.
  */
 export const execute = internalAction({
-  args: { approvalId: v.id("approvals") },
+  args: {
+    approvalId: v.id("approvals"),
+    via: v.optional(v.union(v.literal("web"), v.literal("extension"))),
+  },
   returns: v.object({ ok: v.boolean(), detail: v.string() }),
   handler: async (
     ctx,
@@ -332,6 +344,7 @@ export const execute = internalAction({
 
     await ctx.runMutation(internal.approvals.markApproved, {
       approvalId: args.approvalId,
+      via: args.via ?? "web",
     });
     await ctx.runMutation(internal.agent.recordMessage, {
       workspaceId: approval.workspaceId,
@@ -370,6 +383,7 @@ export const approveAndSend = action({
     });
     return await ctx.runAction(internal.approvals.execute, {
       approvalId: args.approvalId,
+      via: "web",
     });
   },
 });
@@ -470,7 +484,11 @@ export const gateForDevice = internalQuery({
   },
 });
 
-/** Records a note the person typed with their decision. */
+/**
+ * Records a note the person typed. A note is not a decision: an action can be
+ * annotated from the extension and then decided in the web app after a passkey
+ * check, so this never claims to say where the decision was made.
+ */
 export const noteDecision = internalMutation({
   args: {
     approvalId: v.id("approvals"),
@@ -482,13 +500,9 @@ export const noteDecision = internalMutation({
     const approval = await ctx.db.get(args.approvalId);
     if (approval === null) return null;
     const note = args.note.trim().slice(0, 500);
-    // Where the decision was made is worth recording even with no note.
-    await ctx.db.patch(args.approvalId, {
-      decidedVia: args.via,
-      ...(note === "" ? {} : { decisionNote: note }),
-    });
     if (note === "") return null;
 
+    await ctx.db.patch(args.approvalId, { decisionNote: note });
     await ctx.db.insert("auditLog", {
       workspaceId: approval.workspaceId,
       loopId: approval.loopId,

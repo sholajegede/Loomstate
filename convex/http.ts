@@ -221,13 +221,9 @@ http.route({
       });
     }
 
-    await ctx.runMutation(internal.approvals.noteDecision, {
-      approvalId,
-      note: "",
-      via: "extension",
-    });
     const result = await ctx.runAction(internal.approvals.execute, {
       approvalId,
+      via: "extension",
     });
     return json(result);
   }),
