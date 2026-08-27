@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5-mini by default, with gpt-4.1-mini and gpt-4o-mini as fallbacks. The chat model is chosen by the owner from what their own key reaches.
 - **Started:** 2026-08-26T21:21:20Z
-- **Last updated:** 2026-08-27T21:20:00Z
+- **Last updated:** 2026-08-27T22:00:00Z
 
 ## Log
 
@@ -457,3 +457,39 @@ Removing a loop also improved. Captured browsing is still detached rather than
 deleted, because the pages a person read are theirs. A page filed by hand is
 deleted with its loop: it exists only as part of that loop, and leaving it
 behind seeded a loop nobody had asked for.
+
+### 2026-08-27 - settings
+Settings became a product surface rather than a pile of cards: profile, agent
+autonomy, authority on one loop, how Loomstate reaches you, and keys and models.
+
+Two things that were previously fixed in code are now the owner's to set. The
+send backstop can be tuned, and the notification channels can be turned on and
+off one at a time. Neither changed how anything behaves for someone who leaves
+them alone: a workspace with no stored limits uses exactly the built-in three an
+hour and eight a day for one loop and eight an hour across the workspace, and a
+workspace with no stored channel preference is told through both, as before.
+
+The limits are clamped on the server, so they can be loosened but never removed.
+A backstop that can be switched off is not a backstop. Turning every notification
+channel off is allowed, because an action still waits safely in the queue, but
+the audit entry then says plainly that Loomstate told the owner nowhere rather
+than claiming it announced something.
+
+Authorization is the shape of the whole file. Every settings function resolves
+the caller's own workspace from their session; not one of them accepts a
+workspace or user id from the client. Where a mutation does take an id, such as
+a loop, it loads that record and checks the workspace on it first
+(`convex/settings.ts`, `convex/budget.ts`, `convex/notifications.ts`,
+`src/routes/Settings.tsx`, `src/components/SettingsBits.tsx`).
+
+Building the per-loop control found a real bug. Setting a loop's tier wrote the
+tier and stopped there, but what the agent actually reads before sending is the
+live grant, not the tier. Lowering a loop from act to draft therefore looked
+like it applied and quietly did not, because the act grant was still in force.
+Changing a loop's tier now retires a live grant that no longer matches, so the
+next run rebuilds authority at the level the owner chose.
+
+Confirmed on the live deployment: all five settings functions are public,
+none takes a workspace or user id, and every one refuses an unauthenticated
+caller with "Not signed in."; the whole surface renders with real values;
+asking for a limit of 9999 an hour was clamped to 25 and audited as 25.
