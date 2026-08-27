@@ -147,6 +147,59 @@ export const setDefaults = mutation({
 });
 
 /**
+ * Moves every workspace still on "act" down to "draft", so outbound
+ * negotiation waits for a person. Loops keep working; only sending changes.
+ */
+export const holdOutboundForApproval = internalMutation({
+  args: {},
+  returns: v.object({ workspaces: v.number(), loops: v.number() }),
+  handler: async (ctx) => {
+    const workspaces = await ctx.db.query("workspaces").take(200);
+    let touchedWorkspaces = 0;
+    let touchedLoops = 0;
+
+    for (const workspace of workspaces) {
+      if (workspace.defaultTier !== "act") continue;
+      await ctx.db.patch(workspace._id, { defaultTier: "draft" });
+      touchedWorkspaces += 1;
+
+      const loops = await ctx.db
+        .query("loops")
+        .withIndex("by_workspace", (q) => q.eq("workspaceId", workspace._id))
+        .collect();
+      for (const loop of loops) {
+        if (loop.status === "closed" || loop.tier !== "act") continue;
+        await ctx.db.patch(loop._id, { tier: "draft" });
+        touchedLoops += 1;
+      }
+
+      // An old grant still carries act authority, so retire it. The next run
+      // writes a fresh one at the tier the loop now holds.
+      const grants = await ctx.db
+        .query("grants")
+        .withIndex("by_workspace", (q) => q.eq("workspaceId", workspace._id))
+        .collect();
+      const now = Date.now();
+      for (const grant of grants) {
+        if (grant.revokedAt === undefined && grant.tier === "act") {
+          await ctx.db.patch(grant._id, { revokedAt: now });
+        }
+      }
+
+      await ctx.db.insert("auditLog", {
+        workspaceId: workspace._id,
+        actorType: "system",
+        action: "workspace.holdOutbound",
+        detail: `Loomstate moved this workspace to draft authority and retired its act grants. ${touchedLoops} loops now hold outbound email for approval.`,
+        at: now,
+      });
+    }
+
+    return { workspaces: touchedWorkspaces, loops: touchedLoops };
+  },
+});
+
+/**
  * Adopts standing authority on a workspace that pre-dates the setting. Loops
  * built before the setting existed carry the old "watch" default, which would
  * leave them sitting still forever. This lifts them to the workspace default
