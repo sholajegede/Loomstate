@@ -110,10 +110,13 @@ indexes (`convex/agent.ts`, `convex/agents.ts`, `convex/grants.ts`,
 
 ### 2026-08-27 - f150232, 5fba2a2
 The owner can now tell the agent what to do on a loop and choose how often
-Loomstate re-reads a watched page. Both changes made the risk gate testable:
-an instruction to agree a purchase produced a high-risk, money-committing draft
-that stayed in the queue behind a step-up check even with an Act grant
+Loomstate re-reads a watched page. The instruction field made the risk gate
+testable: an instruction to agree a purchase produced a high-risk,
+money-committing draft that stayed in the approval queue behind a step-up check
 (`convex/agent.ts`, `convex/watches.ts`, `src/components/AgentPanel.tsx`).
+
+At this point the loop still carried no grant, so this run only proved the gate
+holds with no authority. The Act-tier case is proved in a later entry.
 
 ### 2026-08-27 - 14b5844
 Verified the outbound path end to end. The agent drafted an email citing the
