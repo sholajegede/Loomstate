@@ -66,6 +66,11 @@ export default defineSchema({
     // The authority every new loop inherits. Set once, not per action.
     defaultTier: v.optional(autonomyTier),
     autopilot: v.optional(v.boolean()),
+    // What the chat answers with. Chosen once, kept for the workspace.
+    chatModel: v.optional(v.string()),
+    chatEffort: v.optional(
+      v.union(v.literal("low"), v.literal("medium"), v.literal("high")),
+    ),
   }).index("by_owner", ["ownerId"]),
 
   /** Read-only watchers invited to a workspace. */

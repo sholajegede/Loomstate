@@ -1,7 +1,9 @@
 /**
- * A small OpenAI client. Loomstate asks the model for structured JSON only, so
- * every call goes through one helper with a schema and a strict decode.
+ * A small OpenAI client with two ways in: `askForJson` for the structured
+ * answers the agent needs, and `askForText` for the prose the chat answers with.
  */
+
+import { supportsReasoningEffort } from "./models";
 
 const ENDPOINT = "https://api.openai.com/v1/chat/completions";
 
@@ -96,18 +98,29 @@ export async function askForText(
     system: string;
     turns: { role: "user" | "assistant"; content: string }[];
     maxTokens?: number;
+    /** The model the owner chose. Loomstate tries this one first. */
+    model?: string;
+    /** Only sent for a model whose family accepts it. */
+    reasoningEffort?: "low" | "medium" | "high";
   },
 ): Promise<{ text: string; model: string }> {
   let lastError = "OpenAI did not answer.";
+  const chain =
+    args.model === undefined || args.model === ""
+      ? modelChain()
+      : [args.model, ...modelChain().filter((m) => m !== args.model)];
 
-  for (const model of modelChain()) {
+  for (const model of chain) {
     const body: Record<string, unknown> = {
       model,
       messages: [{ role: "system", content: args.system }, ...args.turns],
       max_completion_tokens: args.maxTokens ?? 900,
     };
+    if (args.reasoningEffort !== undefined && supportsReasoningEffort(model)) {
+      body.reasoning_effort = args.reasoningEffort;
+    }
 
-    const response = await fetch(ENDPOINT, {
+    let response = await fetch(ENDPOINT, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -115,6 +128,23 @@ export async function askForText(
       },
       body: JSON.stringify(body),
     });
+
+    // A reasoning model can still refuse a particular effort value. Rather than
+    // fail the answer, drop the setting and ask the same model again.
+    if (!response.ok && body.reasoning_effort !== undefined) {
+      const peek = await response.clone().text();
+      if (peek.includes("reasoning_effort") || peek.includes("reasoning.effort")) {
+        delete body.reasoning_effort;
+        response = await fetch(ENDPOINT, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify(body),
+        });
+      }
+    }
 
     if (response.ok) {
       const payload = (await response.json()) as {

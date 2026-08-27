@@ -4,6 +4,8 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { timeAgo } from "../lib/format";
 import { readableError } from "../lib/errors";
+import { useDictation } from "../lib/speech";
+import { AnswerSettings } from "./AnswerSettings";
 
 const LOOP_PROMPTS = [
   "What is happening on this loop?",
@@ -39,6 +41,10 @@ export function Chat({
   const [pending, setPending] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
 
+  // Dictation writes straight into the field, so a person can correct it by
+  // hand before asking.
+  const dictation = useDictation(setDraft);
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
   }, [history, pending]);
@@ -46,6 +52,7 @@ export function Chat({
   async function send(question: string) {
     const text = question.trim();
     if (text === "" || busy) return;
+    if (dictation.listening) dictation.stop();
     setBusy(true);
     setError(null);
     setDraft("");
@@ -77,14 +84,17 @@ export function Chat({
             Loomstate answers from its own records. It sends nothing from here.
           </p>
         </div>
-        {turns.length > 0 ? (
-          <button
-            onClick={() => void clear({ loopId })}
-            className="shrink-0 rounded border border-ink-700 px-2 py-1 text-[11px] text-ink-400 hover:bg-ink-800 hover:text-ink-100"
-          >
-            Clear
-          </button>
-        ) : null}
+        <div className="flex shrink-0 items-center gap-1.5">
+          <AnswerSettings />
+          {turns.length > 0 ? (
+            <button
+              onClick={() => void clear({ loopId })}
+              className="rounded border border-ink-700 px-2 py-1 text-[11px] text-ink-400 hover:bg-ink-800 hover:text-ink-100"
+            >
+              Clear
+            </button>
+          ) : null}
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
@@ -130,6 +140,12 @@ export function Chat({
           </p>
         ) : null}
 
+        {dictation.error !== null ? (
+          <p className="rounded-lg border border-warp/40 bg-warp/5 px-3 py-2 text-xs text-warp">
+            {dictation.error}
+          </p>
+        ) : null}
+
         <div ref={endRef} />
       </div>
 
@@ -140,9 +156,26 @@ export function Chat({
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Ask about this"
+          placeholder={dictation.listening ? "Listening" : "Ask about this"}
           className="min-w-0 flex-1 rounded-lg border border-ink-700 bg-ink-900 px-3 py-2 text-sm outline-none placeholder:text-ink-400/70 focus:border-thread/60"
         />
+
+        {dictation.supported ? (
+          <button
+            type="button"
+            onClick={() => (dictation.listening ? dictation.stop() : dictation.start())}
+            title={dictation.listening ? "Stop dictating" : "Dictate your question"}
+            aria-label={dictation.listening ? "Stop dictating" : "Dictate your question"}
+            aria-pressed={dictation.listening}
+            className={`shrink-0 rounded-lg border px-2.5 py-2 transition-colors ${
+              dictation.listening
+                ? "border-alarm/60 bg-alarm/10 text-alarm"
+                : "border-ink-700 text-ink-300 hover:bg-ink-800 hover:text-ink-100"
+            }`}
+          >
+            <MicIcon listening={dictation.listening} />
+          </button>
+        ) : null}
         <button
           type="submit"
           disabled={busy || draft.trim() === ""}
@@ -152,6 +185,29 @@ export function Chat({
         </button>
       </form>
     </div>
+  );
+}
+
+function MicIcon({ listening }: { listening: boolean }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" className="h-[18px] w-[18px]" aria-hidden="true">
+      <rect
+        x="9"
+        y="3"
+        width="6"
+        height="11"
+        rx="3"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        {...(listening ? { fill: "currentColor", fillOpacity: 0.25 } : {})}
+      />
+      <path
+        d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }
 

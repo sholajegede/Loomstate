@@ -12,6 +12,11 @@ import type { Id } from "./_generated/dataModel";
 import { requireDocIn, requireSession, requireWorkspaceWrite } from "./lib/access";
 import { askForText } from "./lib/openai";
 import { resolveOpenAiKey } from "./secrets";
+import {
+  DEFAULT_CHAT_MODEL,
+  DEFAULT_EFFORT,
+  supportsReasoningEffort,
+} from "./lib/models";
 import { timeAgo } from "./lib/when";
 
 /**
@@ -459,6 +464,22 @@ export const workspaceForCaller = internalQuery({
   },
 });
 
+/** The model and effort the owner chose for the chat. */
+export const answerSettings = internalQuery({
+  args: { workspaceId: v.id("workspaces") },
+  returns: v.object({
+    model: v.string(),
+    effort: v.union(v.literal("low"), v.literal("medium"), v.literal("high")),
+  }),
+  handler: async (ctx, args) => {
+    const workspace = await ctx.db.get(args.workspaceId);
+    return {
+      model: workspace?.chatModel ?? DEFAULT_CHAT_MODEL,
+      effort: workspace?.chatEffort ?? DEFAULT_EFFORT,
+    };
+  },
+});
+
 export const assertLoopAccess = internalQuery({
   args: { loopId: v.id("loops") },
   returns: v.null(),
@@ -560,7 +581,18 @@ export const ask = action({
       },
     ];
 
-    const { text, model } = await askForText(apiKey, { system: SYSTEM, turns });
+    const settings = await ctx.runQuery(internal.chat.answerSettings, {
+      workspaceId,
+    });
+    const { text, model } = await askForText(apiKey, {
+      system: SYSTEM,
+      turns,
+      model: settings.model,
+      // The effort is sent only for a model whose family takes one.
+      reasoningEffort: supportsReasoningEffort(settings.model)
+        ? settings.effort
+        : undefined,
+    });
 
     await ctx.runMutation(internal.chat.addTurn, {
       workspaceId,
