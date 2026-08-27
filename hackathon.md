@@ -10,9 +10,9 @@
 - **Components:** none
 - **Convex features:** schema, tables, indexes, full-text search, paginated queries, queries, mutations, actions, internal functions, HTTP actions, crons, scheduled functions, file storage, realtime queries
 - **Auth:** Convex Auth
-- **AI models:** gpt-5-mini, with gpt-4.1-mini and gpt-4o-mini as fallbacks
+- **AI models:** gpt-5-mini by default, with gpt-4.1-mini and gpt-4o-mini as fallbacks. The chat model is chosen by the owner from what their own key reaches.
 - **Started:** 2026-08-26T21:21:20Z
-- **Last updated:** 2026-08-27T15:35:00Z
+- **Last updated:** 2026-08-27T15:55:00Z
 
 ## Log
 
@@ -362,3 +362,30 @@ Deploying also exposed a real gap: the deployment serves the web app itself from
 a fixed list of page routes, and a new route added to the client answers 404
 until it is added there too. The list is now named and commented, and every page
 route was checked on the live deployment.
+
+### 2026-08-27 - the chat box
+Three additions to the chat. It stays read-only.
+
+Dictation. A microphone in the chat field uses the browser's own speech
+recognition to turn speech into text in the box, so a person can correct it
+before asking. It is input only and never speaks back. Where a browser has no
+such API the button is not shown at all, and a refused microphone says so rather
+than failing quietly.
+
+A model picker. The list is fetched from the owner's own key, so it shows the
+chat models that key actually reaches rather than a list Loomstate imagines.
+The choice is kept for the workspace.
+
+An effort control, shown only for a model that takes one. OpenAI's model list
+says what a key can reach but not what each model supports, so the rule is by
+family and deliberately narrow: a model Loomstate does not recognise is treated
+as having no effort setting rather than being guessed at
+(`convex/lib/models.ts`, `convex/models.ts`, `src/lib/speech.ts`,
+`src/components/AnswerSettings.tsx`).
+
+Testing against the real key found two things worth fixing. The first rule for
+non-reasoning models matched `gpt-5-chat-latest` but not `gpt-5.1-chat-latest`,
+so a chat model was being offered an effort setting it does not have; the rule
+now covers every point version. The second: a reasoning model can still refuse a
+particular effort value, which would have failed the answer outright, so a
+refusal on that parameter now drops it and asks the same model again.
