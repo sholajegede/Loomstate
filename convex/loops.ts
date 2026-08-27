@@ -238,6 +238,185 @@ export const close = mutation({
   },
 });
 
+/**
+ * Removes a loop and everything it holds: its email, approvals, grants, runs,
+ * watches, snapshots, changes, notifications, and its own audit entries. The
+ * browsing events survive but are detached, because the pages a person read are
+ * theirs and were never the problem.
+ */
+export const remove = mutation({
+  args: { loopId: v.id("loops") },
+  returns: v.object({
+    messages: v.number(),
+    approvals: v.number(),
+    watches: v.number(),
+    snapshots: v.number(),
+    diffs: v.number(),
+    auditEntries: v.number(),
+    eventsDetached: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const loop = await ctx.db.get(args.loopId);
+    if (loop === null) throw new Error("Loop not found.");
+    await requireWorkspaceWrite(ctx, loop.workspaceId);
+    return await purgeLoop(ctx, args.loopId);
+  },
+});
+
+const purgeCounts = v.object({
+  messages: v.number(),
+  approvals: v.number(),
+  watches: v.number(),
+  snapshots: v.number(),
+  diffs: v.number(),
+  auditEntries: v.number(),
+  eventsDetached: v.number(),
+});
+
+/**
+ * Removes a loop without a signed-in session. Used to clear data an operator
+ * must remove from a deployment they cannot open in a browser.
+ */
+export const purge = internalMutation({
+  args: { loopId: v.id("loops") },
+  returns: purgeCounts,
+  handler: async (ctx, args) => {
+    return await purgeLoop(ctx, args.loopId);
+  },
+});
+
+type PurgeCounts = {
+  messages: number;
+  approvals: number;
+  watches: number;
+  snapshots: number;
+  diffs: number;
+  auditEntries: number;
+  eventsDetached: number;
+};
+
+async function purgeLoop(
+  ctx: MutationCtx,
+  loopId: Id<"loops">,
+): Promise<PurgeCounts> {
+  {
+    const loop = await ctx.db.get(loopId);
+    if (loop === null) throw new Error("Loop not found.");
+    const title = loop.title;
+    const workspaceId = loop.workspaceId;
+    const args = { loopId };
+
+    const counts = {
+      messages: 0,
+      approvals: 0,
+      watches: 0,
+      snapshots: 0,
+      diffs: 0,
+      auditEntries: 0,
+      eventsDetached: 0,
+    };
+
+    for (const message of await ctx.db
+      .query("messages")
+      .withIndex("by_loop_time", (q) => q.eq("loopId", args.loopId))
+      .take(500)) {
+      await ctx.db.delete(message._id);
+      counts.messages += 1;
+    }
+
+    for (const approval of await ctx.db
+      .query("approvals")
+      .withIndex("by_loop", (q) => q.eq("loopId", args.loopId))
+      .take(500)) {
+      await ctx.db.delete(approval._id);
+      counts.approvals += 1;
+    }
+
+    for (const grant of await ctx.db
+      .query("grants")
+      .withIndex("by_loop", (q) => q.eq("loopId", args.loopId))
+      .take(200)) {
+      await ctx.db.delete(grant._id);
+    }
+
+    for (const run of await ctx.db
+      .query("agentRuns")
+      .withIndex("by_loop_time", (q) => q.eq("loopId", args.loopId))
+      .take(500)) {
+      await ctx.db.delete(run._id);
+    }
+
+    for (const diff of await ctx.db
+      .query("diffs")
+      .withIndex("by_loop_time", (q) => q.eq("loopId", args.loopId))
+      .take(500)) {
+      await ctx.db.delete(diff._id);
+      counts.diffs += 1;
+    }
+
+    for (const watch of await ctx.db
+      .query("watches")
+      .withIndex("by_loop", (q) => q.eq("loopId", args.loopId))
+      .take(200)) {
+      for (const snapshot of await ctx.db
+        .query("snapshots")
+        .withIndex("by_watch_time", (q) => q.eq("watchId", watch._id))
+        .take(300)) {
+        await ctx.db.delete(snapshot._id);
+        counts.snapshots += 1;
+      }
+      await ctx.db.delete(watch._id);
+      counts.watches += 1;
+    }
+
+    for (const agent of await ctx.db
+      .query("agents")
+      .withIndex("by_loop", (q) => q.eq("loopId", args.loopId))
+      .take(50)) {
+      await ctx.db.delete(agent._id);
+    }
+
+    for (const entry of await ctx.db
+      .query("auditLog")
+      .withIndex("by_loop_time", (q) => q.eq("loopId", args.loopId))
+      .take(1000)) {
+      await ctx.db.delete(entry._id);
+      counts.auditEntries += 1;
+    }
+
+    for (const note of await ctx.db
+      .query("notifications")
+      .withIndex("by_workspace_delivered", (q) =>
+        q.eq("workspaceId", workspaceId),
+      )
+      .take(500)) {
+      if (note.loopId === args.loopId) await ctx.db.delete(note._id);
+    }
+
+    // The browsing signal stays. Clearing only the link keeps it out of a
+    // future rebuild, so the loop does not come back.
+    for (const event of await ctx.db
+      .query("events")
+      .withIndex("by_loop", (q) => q.eq("loopId", args.loopId))
+      .take(500)) {
+      await ctx.db.patch(event._id, { loopId: undefined });
+      counts.eventsDetached += 1;
+    }
+
+    await ctx.db.delete(args.loopId);
+
+    await ctx.db.insert("auditLog", {
+      workspaceId,
+      actorType: "user",
+      action: "loop.remove",
+      detail: `The owner removed the loop "${title}" and everything it held.`,
+      at: Date.now(),
+    });
+
+    return counts;
+  }
+}
+
 // --- reconstruction -------------------------------------------------------
 
 export const pendingSignal = internalQuery({

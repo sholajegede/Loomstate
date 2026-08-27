@@ -16,6 +16,7 @@ export default function LoopDetail() {
     loopId === undefined ? "skip" : { loopId: loopId as Id<"loops"> },
   );
   const close = useMutation(api.loops.close);
+  const remove = useMutation(api.loops.remove);
 
   if (data === undefined) {
     return (
@@ -119,7 +120,8 @@ export default function LoopDetail() {
           <Card>
             <h2 className="text-sm font-medium">Close this loop</h2>
             <p className="mt-1 text-sm text-ink-400">
-              The agent stops all work on a closed loop.
+              The agent stops all work on a closed loop. Removing it deletes its
+              email, approvals, and watches. The pages you read are kept.
             </p>
             <button
               onClick={() => {
@@ -128,6 +130,14 @@ export default function LoopDetail() {
               className="mt-3 w-full rounded-lg border border-ink-700 px-3 py-2 text-sm text-ink-300 hover:border-alarm/50 hover:text-alarm"
             >
               Close loop
+            </button>
+            <button
+              onClick={() => {
+                void remove({ loopId: loop._id }).then(() => navigate("/"));
+              }}
+              className="mt-2 w-full rounded-lg border border-alarm/40 px-3 py-2 text-sm text-alarm hover:bg-alarm/10"
+            >
+              Remove loop and its data
             </button>
           </Card>
         </div>

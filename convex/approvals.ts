@@ -299,6 +299,21 @@ export const approveAndSend = action({
       body: string;
     };
 
+    // The send limit binds here too. A person approving one action at a time
+    // is deliberate, but a loop that has already sent far too much is still
+    // wrong to send from, however the send was started.
+    const budget = await ctx.runMutation(internal.budget.checkAndReserve, {
+      loopId: approval.loopId,
+    });
+    if (!budget.allowed) {
+      return {
+        ok: false,
+        detail:
+          budget.reason ??
+          "This loop is over its send limit. Loomstate sent nothing.",
+      };
+    }
+
     const key = process.env.AGENTMAIL_API_KEY;
     if (key === undefined || key === "") {
       throw new Error("AGENTMAIL_API_KEY is not set on this deployment.");
