@@ -287,8 +287,9 @@ export const applyClusters = internalMutation({
   handler: async (ctx, args) => {
     const now = Date.now();
     const workspace = await ctx.db.get(args.workspaceId);
-    // Authority is a setting, not a question asked per loop.
-    const inheritedTier = workspace?.defaultTier ?? "act";
+    // Authority is a setting, not a question asked per loop. An unknown
+    // workspace falls back to the safe end, not the permissive one.
+    const inheritedTier = workspace?.defaultTier ?? "draft";
     let created = 0;
     let updated = 0;
 

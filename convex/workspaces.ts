@@ -62,7 +62,7 @@ export const current = query({
               _id: workspace._id,
               name: workspace.name,
               createdAt: workspace.createdAt,
-              defaultTier: workspace.defaultTier ?? "act",
+              defaultTier: workspace.defaultTier ?? "draft",
               autopilot: workspace.autopilot !== false,
             },
     };
@@ -86,9 +86,9 @@ export const ensure = mutation({
       name: user.email ? `${user.email.split("@")[0]}'s loom` : "My loom",
       ownerId: user._id,
       createdAt: now,
-      // Loomstate acts on low-stakes email by itself from the start. Anything
-      // that commits money still waits for approval, whatever this says.
-      defaultTier: "act",
+      // A new workspace holds every outgoing email for approval. The owner can
+      // move to "act" in one click once they trust what the agent drafts.
+      defaultTier: "draft",
       autopilot: true,
     });
     await ctx.db.patch(user._id, { defaultWorkspaceId: workspaceId });
@@ -139,7 +139,7 @@ export const setDefaults = mutation({
       detail:
         args.autopilot === false
           ? "The owner paused the agent across this workspace."
-          : `The owner set the standing authority to ${args.defaultTier ?? workspace.defaultTier ?? "act"}.`,
+          : `The owner set the standing authority to ${args.defaultTier ?? workspace.defaultTier ?? "draft"}.`,
       at: Date.now(),
     });
     return null;
@@ -164,7 +164,7 @@ export const adoptStandingAuthority = internalMutation({
       if (workspace.defaultTier !== undefined) continue;
 
       await ctx.db.patch(workspace._id, {
-        defaultTier: "act",
+        defaultTier: "draft",
         autopilot: workspace.autopilot ?? true,
       });
       touchedWorkspaces += 1;
@@ -175,7 +175,7 @@ export const adoptStandingAuthority = internalMutation({
         .collect();
       for (const loop of loops) {
         if (loop.status === "closed" || loop.tier !== "watch") continue;
-        await ctx.db.patch(loop._id, { tier: "act" });
+        await ctx.db.patch(loop._id, { tier: "draft" });
         touchedLoops += 1;
       }
 
@@ -183,7 +183,7 @@ export const adoptStandingAuthority = internalMutation({
         workspaceId: workspace._id,
         actorType: "system",
         action: "workspace.adoptAuthority",
-        detail: `Loomstate applied standing act authority to ${touchedLoops} existing loops.`,
+        detail: `Loomstate applied standing draft authority to ${touchedLoops} existing loops.`,
         at: Date.now(),
       });
     }
