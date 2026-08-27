@@ -593,9 +593,14 @@ export const sweepDue = internalAction({
   returns: v.object({ swept: v.number() }),
   handler: async (ctx): Promise<{ swept: number }> => {
     const watchIds = await ctx.runQuery(internal.watches.dueWatches, { limit: 10 });
+    let changed = 0;
     for (const watchId of watchIds) {
-      await ctx.runAction(internal.watches.sweepOne, { watchId });
+      const result = await ctx.runAction(internal.watches.sweepOne, { watchId });
+      changed += result.changes;
     }
+    console.log(
+      `sweep: read ${watchIds.length} watches, found ${changed} changes`,
+    );
     return { swept: watchIds.length };
   },
 });
