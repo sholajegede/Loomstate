@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5-mini, with gpt-4.1-mini and gpt-4o-mini as fallbacks
 - **Started:** 2026-08-26T21:21:20Z
-- **Last updated:** 2026-08-27T04:10:00Z
+- **Last updated:** 2026-08-27T04:30:00Z
 
 ## Log
 
@@ -247,3 +247,40 @@ on a listing moving from "₦ 2,850,000" to "₦2,850,000", which is the same pr
 with different spacing. Prices and availability are now compared with spacing
 and case removed, so a site reflowing its markup no longer wakes the agent
 (`convex/lib/firecrawl.ts`, `convex/watches.ts`).
+
+### 2026-08-27 - 11e5778, and the send cap
+Stopped a runaway. On the live workspace the agent re-emailed the same seller
+seventeen times in an hour, walking a purchase negotiation forward on its own.
+
+What went wrong, in order. An inbound reply scheduled an agent run immediately,
+which skipped the sweep's cooldown entirely. The loop had no memory of which
+question it had asked, only a free-text next step it rewrote every run, so it
+invented a fresh version of the same ask each time: deposit, then bank details,
+then collection address, then hold terms, then confirm transfer. Readiness was
+judged on unread page changes, which nothing ever marked read, so scheduled
+passes stayed hot forever. Nothing compared a draft against what had already
+gone out, and nothing capped sending.
+
+Four fixes, each independent of the others.
+
+- A loop now records the question it has out and the questions already answered.
+  A reply settles the open question, and a settled question is never asked
+  again, however differently the model words it.
+- A run with nothing newer than the last run is a no-op. Readiness is judged on
+  new information arriving, not on time passing.
+- Before any send, the draft is compared against recent outbound email to the
+  same address by shared meaningful words. A near-duplicate is refused.
+- A hard cap sits in front of every send: three an hour and eight a day for one
+  loop, eight an hour across a workspace. Going over stops that loop, writes the
+  reason to the audit log, and raises it for review. A stopped loop stays
+  stopped until a person clears it.
+
+The live workspace also moved from act to draft, and its act grants were retired,
+so outbound negotiation waits for approval rather than going out by itself.
+
+Confirmed on the live deployment against the real incident data: the cap refused
+a send with "the agent sent 16 emails in an hour, which is over the limit of 3",
+stopped that loop, and queued a notification linking to it; a stopped loop
+returns "paused" and does no work; a loop with nothing new returns "Nothing new
+on this loop since the agent last looked"; the scheduled sweep now finds nothing
+to do; and a reply moved an open question into the answered list and cleared it.
