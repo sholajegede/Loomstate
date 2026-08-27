@@ -4,7 +4,7 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { Card } from "./Page";
 import { TIERS } from "./LoopBits";
-import { timeAgo } from "../lib/format";
+import { timeAgo, timeUntil } from "../lib/format";
 import { readableError } from "../lib/errors";
 
 export function AgentPanel({ loopId }: { loopId: Id<"loops"> }) {
@@ -14,6 +14,7 @@ export function AgentPanel({ loopId }: { loopId: Id<"loops"> }) {
   const grant = useMutation(api.grants.grant);
   const revoke = useMutation(api.grants.revoke);
   const workLoop = useAction(api.agent.workLoopNow);
+  const provision = useAction(api.agents.provision);
 
   const [recipient, setRecipient] = useState("");
   const [instruction, setInstruction] = useState("");
@@ -21,6 +22,24 @@ export function AgentPanel({ loopId }: { loopId: Id<"loops"> }) {
   const [note, setNote] = useState<string | null>(null);
 
   const live = (grants ?? []).find((g) => g.active) ?? null;
+
+  /** Gives the loop an agent if it has none, then records the grant. */
+  async function setAuthority(tier: "watch" | "draft" | "act") {
+    setBusy(true);
+    setNote(null);
+    try {
+      const agentId =
+        agent === undefined || agent === null
+          ? (await provision({ loopId })).agentId
+          : agent._id;
+      await grant({ loopId, agentId, tier });
+      setNote(`The agent now holds ${tier} authority on this loop.`);
+    } catch (error) {
+      setNote(readableError(error, "Loomstate could not set the authority."));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function run() {
     setBusy(true);
@@ -65,14 +84,9 @@ export function AgentPanel({ loopId }: { loopId: Id<"loops"> }) {
             {TIERS.map((tier) => (
               <button
                 key={tier.id}
-                onClick={() => {
-                  if (agent === undefined || agent === null) {
-                    setNote("Run the agent once first, so it has an address.");
-                    return;
-                  }
-                  void grant({ loopId, agentId: agent._id, tier: tier.id });
-                }}
-                className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${
+                onClick={() => void setAuthority(tier.id)}
+                disabled={busy}
+                className={`w-full rounded-lg border px-3 py-2 text-left transition-colors disabled:opacity-50 ${
                   live?.tier === tier.id
                     ? "border-thread/50 bg-thread/5"
                     : "border-ink-800 hover:border-ink-600"
@@ -88,7 +102,7 @@ export function AgentPanel({ loopId }: { loopId: Id<"loops"> }) {
         {live !== null ? (
           <div className="mt-3 rounded-lg border border-ink-800 px-3 py-2">
             <p className="text-[11px] text-ink-400">
-              Grant expires {timeAgo(live.expiresAt).replace(" ago", " from now")}
+              Grant expires {timeUntil(live.expiresAt)}
             </p>
             <p className="mt-1 font-mono text-[11px] text-ink-300">
               {live.allowedActions.join(", ") || "no outbound action"}

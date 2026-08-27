@@ -1,10 +1,12 @@
 import { v } from "convex/values";
 import {
+  action,
   internalAction,
   internalMutation,
   internalQuery,
   query,
 } from "./_generated/server";
+import { getAuthUserId } from "@convex-dev/auth/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { requireDocIn, requireSession } from "./lib/access";
@@ -186,6 +188,44 @@ export const ensureForLoop = internalAction({
     );
 
     return { agentId, inboxId: inbox.inbox_id, inboxAddress: inbox.email };
+  },
+});
+
+/**
+ * Gives a loop its agent on request, so the owner can grant authority before
+ * the agent has ever run. Safe to call repeatedly.
+ */
+export const provision = action({
+  args: { loopId: v.id("loops") },
+  returns: v.object({ agentId: v.id("agents"), inboxAddress: v.string() }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ agentId: Id<"agents">; inboxAddress: string }> => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new Error("Not signed in.");
+    const loop = await ctx.runQuery(internal.agents.loopForProvision, {
+      loopId: args.loopId,
+    });
+    const agent = await ctx.runAction(internal.agents.ensureForLoop, {
+      workspaceId: loop.workspaceId,
+      loopId: args.loopId,
+      loopTitle: loop.title,
+    });
+    return { agentId: agent.agentId, inboxAddress: agent.inboxAddress };
+  },
+});
+
+export const loopForProvision = internalQuery({
+  args: { loopId: v.id("loops") },
+  returns: v.object({
+    workspaceId: v.id("workspaces"),
+    title: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const loop = await ctx.db.get(args.loopId);
+    const checked = await requireDocIn(ctx, loop, "Loop");
+    return { workspaceId: checked.workspaceId, title: checked.title };
   },
 });
 
