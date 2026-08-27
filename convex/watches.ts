@@ -391,10 +391,12 @@ export const recordSnapshot = internalMutation({
       });
     }
 
-    // A real change on the live web pulls the loop back up the intent map.
+    // A real change on the live web pulls the loop back up the intent map and
+    // counts as new information the agent has not acted on yet.
     if (diffIds.length > 0 && args.changes.some((c) => c.kind !== "first_seen")) {
       const loop = await ctx.db.get(watch.loopId);
       if (loop !== null && loop.status !== "closed") {
+        await ctx.db.patch(loop._id, { lastSignalAt: now });
         const unseen = (
           await ctx.db
             .query("diffs")

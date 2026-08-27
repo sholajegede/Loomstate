@@ -39,6 +39,8 @@ const loopShape = v.object({
   contactSource: v.optional(v.string()),
   blockedReason: v.optional(v.string()),
   lastWorkedAt: v.optional(v.number()),
+  agentPausedAt: v.optional(v.number()),
+  agentPauseReason: v.optional(v.string()),
 });
 
 /** Every loop in the workspace, liveliest first. The intent map reads this. */
@@ -166,6 +168,38 @@ export const setContact = mutation({
       actorType: "user",
       action: "loop.setContact",
       detail: `The owner set the contact for this loop to ${contact}.`,
+      at: Date.now(),
+    });
+    return null;
+  },
+});
+
+/**
+ * Clears a stop a send limit put on a loop. The owner does this after they
+ * have looked at what the agent was doing.
+ */
+export const resumeAgent = mutation({
+  args: { loopId: v.id("loops") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const loop = await ctx.db.get(args.loopId);
+    if (loop === null) throw new Error("Loop not found.");
+    await requireWorkspaceWrite(ctx, loop.workspaceId);
+
+    await ctx.db.patch(args.loopId, {
+      agentPausedAt: undefined,
+      agentPauseReason: undefined,
+      blockedReason: undefined,
+      // Treat the restart as a fresh start, so the agent does not immediately
+      // act on the information that led to the stop.
+      lastWorkedAt: Date.now(),
+    });
+    await ctx.db.insert("auditLog", {
+      workspaceId: loop.workspaceId,
+      loopId: args.loopId,
+      actorType: "user",
+      action: "loop.resumeAgent",
+      detail: "The owner let the agent work this loop again.",
       at: Date.now(),
     });
     return null;
@@ -616,6 +650,8 @@ function publicLoop(loop: Doc<"loops">) {
     contactSource: loop.contactSource,
     blockedReason: loop.blockedReason,
     lastWorkedAt: loop.lastWorkedAt,
+    agentPausedAt: loop.agentPausedAt,
+    agentPauseReason: loop.agentPauseReason,
   };
 }
 

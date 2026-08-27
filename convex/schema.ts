@@ -142,6 +142,17 @@ export default defineSchema({
     blockedReason: v.optional(v.string()),
     lastWorkedAt: v.optional(v.number()),
     watchesSeeded: v.optional(v.boolean()),
+    // When information the agent has not acted on last arrived. A run with
+    // nothing newer than lastWorkedAt is a no-op.
+    lastSignalAt: v.optional(v.number()),
+    // The question the agent has out and is waiting on, and the questions it
+    // already asked and got an answer to. A settled step is never re-sent.
+    openStepKey: v.optional(v.string()),
+    openStepAt: v.optional(v.number()),
+    answeredStepKeys: v.optional(v.array(v.string())),
+    // Set when a backstop trips. The agent sends nothing until a human clears it.
+    agentPausedAt: v.optional(v.number()),
+    agentPauseReason: v.optional(v.string()),
   })
     .index("by_workspace", ["workspaceId"])
     .index("by_workspace_status", ["workspaceId", "status"])

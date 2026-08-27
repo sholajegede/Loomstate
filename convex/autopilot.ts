@@ -95,6 +95,8 @@ export const loopsReadyForWork = internalQuery({
     const ready: Id<"loops">[] = [];
     for (const loop of active) {
       if (loop.tier === "watch") continue;
+      // A loop a backstop stopped never comes back on its own.
+      if (loop.agentPausedAt !== undefined) continue;
       if (
         loop.lastWorkedAt !== undefined &&
         now - loop.lastWorkedAt < WORK_COOLDOWN_MS
@@ -105,28 +107,14 @@ export const loopsReadyForWork = internalQuery({
       const workspace = await ctx.db.get(loop.workspaceId);
       if (workspace?.autopilot === false) continue;
 
-      // Something new means an unread change on the live web, an unanswered
-      // reply, or a loop the agent has never looked at.
-      const diffs = await ctx.db
-        .query("diffs")
-        .withIndex("by_loop_time", (q) => q.eq("loopId", loop._id))
-        .order("desc")
-        .take(10);
-      const unseenChange = diffs.some(
-        (d) => d.seenAt === undefined && d.kind !== "first_seen",
-      );
-
-      const lastMessage = await ctx.db
-        .query("messages")
-        .withIndex("by_loop_time", (q) => q.eq("loopId", loop._id))
-        .order("desc")
-        .first();
-      const awaitingAnswer =
-        lastMessage !== null && lastMessage.direction === "inbound";
-
+      // Ready means new information, not merely time passing. A loop the agent
+      // has already answered stays quiet until something actually changes.
       const neverWorked = loop.lastWorkedAt === undefined;
+      const hasNewSignal =
+        loop.lastSignalAt !== undefined &&
+        (loop.lastWorkedAt === undefined || loop.lastSignalAt > loop.lastWorkedAt);
 
-      if (unseenChange || awaitingAnswer || neverWorked) ready.push(loop._id);
+      if (neverWorked || hasNewSignal) ready.push(loop._id);
       if (ready.length >= MAX_LOOPS_PER_SWEEP) break;
     }
     return ready;

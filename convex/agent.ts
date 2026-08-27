@@ -12,6 +12,7 @@ import { requireDocIn } from "./lib/access";
 import { askForJson } from "./lib/openai";
 import { sendMessage } from "./lib/agentmail";
 import { resolveOpenAiKey } from "./secrets";
+import { DUPLICATE_THRESHOLD, similarity, stepKeyOf } from "./lib/similarity";
 
 const evidenceValidator = v.object({
   watchId: v.optional(v.id("watches")),
@@ -38,6 +39,15 @@ export const loopBrief = internalQuery({
     ownerEmail: v.optional(v.string()),
     contactEmail: v.optional(v.string()),
     contactSource: v.optional(v.string()),
+    lastSignalAt: v.optional(v.number()),
+    lastWorkedAt: v.optional(v.number()),
+    agentPausedAt: v.optional(v.number()),
+    agentPauseReason: v.optional(v.string()),
+    openStepKey: v.optional(v.string()),
+    answeredStepKeys: v.array(v.string()),
+    recentOutbound: v.array(
+      v.object({ to: v.array(v.string()), subject: v.string(), body: v.string() }),
+    ),
     diffs: v.array(
       v.object({
         _id: v.id("diffs"),
@@ -108,6 +118,16 @@ export const loopBrief = internalQuery({
       ownerEmail: owner?.email,
       contactEmail: loop.contactEmail,
       contactSource: loop.contactSource,
+      lastSignalAt: loop.lastSignalAt,
+      lastWorkedAt: loop.lastWorkedAt,
+      agentPausedAt: loop.agentPausedAt,
+      agentPauseReason: loop.agentPauseReason,
+      openStepKey: loop.openStepKey,
+      answeredStepKeys: loop.answeredStepKeys ?? [],
+      recentOutbound: messages
+        .filter((m) => m.direction === "outbound")
+        .slice(0, 6)
+        .map((m) => ({ to: m.to, subject: m.subject, body: m.body })),
       diffs,
       thread: messages
         .reverse()
@@ -231,6 +251,7 @@ const DECIDE_SCHEMA = {
       "reversible",
       "riskLevel",
       "nextStep",
+      "stepKey",
     ],
     properties: {
       action: { type: "string", enum: ["email", "wait", "report"] },
@@ -242,6 +263,11 @@ const DECIDE_SCHEMA = {
       reversible: { type: "boolean" },
       riskLevel: { type: "string", enum: ["low", "medium", "high"] },
       nextStep: { type: "string" },
+      stepKey: {
+        type: "string",
+        description:
+          "A short stable slug for what this email asks, such as ask-availability or ask-bank-details. The same question must always produce the same slug.",
+      },
     },
   },
 };
@@ -256,6 +282,7 @@ type Decision = {
   reversible: boolean;
   riskLevel: "low" | "medium" | "high";
   nextStep: string;
+  stepKey: string;
 };
 
 export const recordMessage = internalMutation({
@@ -310,15 +337,23 @@ export const recordMessage = internalMutation({
       at: now,
     });
 
-    // An answer is movement. The loop rises and its next step changes.
+    // An answer is movement. The loop rises, and the question the agent had
+    // out is now settled: it is never asked again.
     if (args.direction === "inbound") {
       const loop = await ctx.db.get(args.loopId);
       if (loop !== null && loop.status !== "closed") {
+        const answered = new Set(loop.answeredStepKeys ?? []);
+        if (loop.openStepKey !== undefined) answered.add(loop.openStepKey);
+
         await ctx.db.patch(args.loopId, {
           lastActivityAt: now,
+          lastSignalAt: now,
           aliveness: Math.min(100, loop.aliveness + 20),
           status: "active",
           nextStep: `Read the reply from ${args.from} and decide.`,
+          openStepKey: undefined,
+          openStepAt: undefined,
+          answeredStepKeys: [...answered].slice(-40),
         });
       }
     }
@@ -441,6 +476,20 @@ export const setBlocker = internalMutation({
   },
 });
 
+/** Records the question the agent has out and is now waiting on. */
+export const openStep = internalMutation({
+  args: { loopId: v.id("loops"), stepKey: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    if (args.stepKey === "") return null;
+    await ctx.db.patch(args.loopId, {
+      openStepKey: args.stepKey,
+      openStepAt: Date.now(),
+    });
+    return null;
+  },
+});
+
 /** Marks that the agent looked at this loop, so the sweep paces itself. */
 export const markWorked = internalMutation({
   args: { loopId: v.id("loops") },
@@ -483,6 +532,28 @@ export const workLoop = internalAction({
     const brief = await ctx.runQuery(internal.agent.loopBrief, {
       loopId: args.loopId,
     });
+
+    // A loop a backstop stopped stays stopped until a person clears it.
+    if (brief.agentPausedAt !== undefined) {
+      return {
+        outcome: "paused",
+        detail:
+          brief.agentPauseReason ?? "This loop is stopped and waits for review.",
+      };
+    }
+
+    // Nothing new has arrived since the agent last looked. Doing the work again
+    // would only re-derive the same answer and send it a second time.
+    const manual = args.trigger === "manual";
+    const hasNewSignal =
+      brief.lastSignalAt !== undefined &&
+      (brief.lastWorkedAt === undefined || brief.lastSignalAt > brief.lastWorkedAt);
+    if (!manual && brief.lastWorkedAt !== undefined && !hasNewSignal) {
+      return {
+        outcome: "idle",
+        detail: "Nothing new on this loop since the agent last looked.",
+      };
+    }
 
     const agent = await ctx.runAction(internal.agents.ensureForLoop, {
       workspaceId: brief.workspaceId,
@@ -596,6 +667,48 @@ export const workLoop = internalAction({
         reason: undefined,
       });
 
+      // The other side already answered this exact question. Asking again in
+      // fresh words is the failure this guard exists to stop.
+      const stepKey = stepKeyOf(decision.stepKey ?? decision.subject);
+      if (stepKey !== "" && brief.answeredStepKeys.includes(stepKey)) {
+        const detail = `The seller already answered "${stepKey}". The agent sent nothing.`;
+        await ctx.runMutation(internal.agent.addStep, {
+          runId,
+          label: "The agent stopped a repeat question.",
+          detail,
+        });
+        await ctx.runMutation(internal.agent.finishRun, {
+          runId,
+          status: "done",
+          outcome: detail,
+        });
+        return { outcome: "settled", detail };
+      }
+
+      // Even with a new step name, near-identical wording to something already
+      // sent to this address is a resend.
+      const draft = `${decision.subject} ${decision.body}`;
+      const echo = brief.recentOutbound.find(
+        (m) =>
+          m.to.some((address) => address.includes(recipient)) &&
+          similarity(`${m.subject} ${m.body}`, draft) >= DUPLICATE_THRESHOLD,
+      );
+      if (echo !== undefined) {
+        const detail =
+          "The agent already sent this message to this address. It sent nothing.";
+        await ctx.runMutation(internal.agent.addStep, {
+          runId,
+          label: "The agent stopped a near-duplicate email.",
+          detail,
+        });
+        await ctx.runMutation(internal.agent.finishRun, {
+          runId,
+          status: "done",
+          outcome: detail,
+        });
+        return { outcome: "duplicate", detail };
+      }
+
       // The risk gate. Money and one-way actions never bypass the queue, at
       // any tier. This check is code, not a prompt the model can talk past.
       const mustAsk =
@@ -651,6 +764,26 @@ export const workLoop = internalAction({
         return { outcome: "queued", detail, approvalId };
       }
 
+      // The last gate before anything leaves. Counts real sends and stops the
+      // agent outright when a loop or the workspace goes over its limit.
+      const budget = await ctx.runMutation(internal.budget.checkAndReserve, {
+        loopId: args.loopId,
+      });
+      if (!budget.allowed) {
+        const detail = budget.reason ?? "The agent is over its send limit.";
+        await ctx.runMutation(internal.agent.addStep, {
+          runId,
+          label: "The send limit stopped this email.",
+          detail,
+        });
+        await ctx.runMutation(internal.agent.finishRun, {
+          runId,
+          status: "blocked",
+          outcome: detail,
+        });
+        return { outcome: "capped", detail };
+      }
+
       const sent = await sendMessage(requireAgentMailKey(), agent.inboxId, {
         to: [recipient],
         subject: decision.subject,
@@ -670,6 +803,11 @@ export const workLoop = internalAction({
         body: decision.body,
         grantId: grant._id,
         evidence,
+      });
+
+      await ctx.runMutation(internal.agent.openStep, {
+        loopId: args.loopId,
+        stepKey,
       });
 
       const detail = `The agent emailed ${recipient} from ${agent.inboxAddress}.`;

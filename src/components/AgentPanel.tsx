@@ -14,6 +14,8 @@ type Loop = {
   contactSource?: string;
   blockedReason?: string;
   lastWorkedAt?: number;
+  agentPausedAt?: number;
+  agentPauseReason?: string;
 };
 
 /**
@@ -132,6 +134,9 @@ export function AgentPanel({ loop }: { loop: Loop }) {
 }
 
 function Status({ loop, hasAgent }: { loop: Loop; hasAgent: boolean }) {
+  if (loop.agentPausedAt !== undefined) {
+    return <PausedNotice loop={loop} />;
+  }
   if (loop.blockedReason !== undefined) {
     return (
       <p className="mt-2 rounded-lg border border-warp/40 bg-warp/5 px-3 py-2 text-sm text-ink-100">
@@ -152,6 +157,26 @@ function Status({ loop, hasAgent }: { loop: Loop; hasAgent: boolean }) {
         ? "Loomstate works this loop on its own. It asks you only before an action that commits money or cannot be undone."
         : "Loomstate works this loop on its own within a few minutes of a change."}
     </p>
+  );
+}
+
+function PausedNotice({ loop }: { loop: Loop }) {
+  const resume = useMutation(api.loops.resumeAgent);
+  return (
+    <div className="mt-2 rounded-lg border border-alarm/40 bg-alarm/5 px-3 py-2.5">
+      <p className="text-sm text-ink-100">
+        {loop.agentPauseReason ?? "Loomstate stopped the agent on this loop."}
+      </p>
+      <p className="mt-1 text-[11px] text-ink-400">
+        Read the email below before you let it start again.
+      </p>
+      <button
+        onClick={() => void resume({ loopId: loop._id })}
+        className="mt-2 rounded-lg border border-ink-700 px-3 py-1.5 text-xs hover:bg-ink-800"
+      >
+        Let the agent work this loop again
+      </button>
+    </div>
   );
 }
 
