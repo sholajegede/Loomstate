@@ -52,6 +52,9 @@ export const status = query({
       .take(1);
 
     const hasKey = secrets !== null;
+    // A workspace that already has what it needs is not interrupted, which
+    // matters for anyone who was using Loomstate before setup existed.
+    const alreadyWorking = hasKey && live.length > 0;
 
     return {
       hasKey,
@@ -63,7 +66,8 @@ export const status = query({
       skippedAt: workspace.setupSkippedAt,
       showOnArrival:
         workspace.setupDoneAt === undefined &&
-        workspace.setupSkippedAt === undefined,
+        workspace.setupSkippedAt === undefined &&
+        !alreadyWorking,
       blocked: !hasKey,
     };
   },
