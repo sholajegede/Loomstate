@@ -22,6 +22,7 @@ import SignIn from "./routes/SignIn";
 import { LoopsSidebar } from "./components/LoopsSidebar";
 import AskLoomstate from "./routes/AskLoomstate";
 import Setup from "./routes/Setup";
+import { Loading } from "./components/Loading";
 
 const nav = [
   { to: "/", label: "Intent map", icon: MapIcon, end: true },
@@ -36,9 +37,7 @@ export default function App() {
   return (
     <>
       <AuthLoading>
-        <div className="flex h-full items-center justify-center text-sm text-ink-400">
-          Loading
-        </div>
+        <Loading />
       </AuthLoading>
       <Unauthenticated>
         <SignIn />
@@ -63,11 +62,7 @@ function Workspace() {
   }, [session, ensureWorkspace]);
 
   if (session === undefined || session === null || session.workspace === null) {
-    return (
-      <div className="flex h-full items-center justify-center text-sm text-ink-400">
-        Preparing your workspace
-      </div>
-    );
+    return <Loading label="Preparing your workspace" />;
   }
 
   // A new workspace goes to setup first. Nothing works without a key, so an

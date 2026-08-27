@@ -6,6 +6,7 @@ import { timeAgo } from "../lib/format";
 import { readableError } from "../lib/errors";
 import { useDictation } from "../lib/speech";
 import { AnswerSettings } from "./AnswerSettings";
+import { Loading, LoadingRow } from "./Loading";
 
 const LOOP_PROMPTS = [
   "What is happening on this loop?",
@@ -99,7 +100,7 @@ export function Chat({
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
         {history === undefined ? (
-          <p className="text-sm text-ink-400">Loading</p>
+          <Loading />
         ) : turns.length === 0 && pending === null ? (
           <div className="space-y-2">
             <p className="text-sm text-ink-400">
@@ -130,7 +131,7 @@ export function Chat({
                 {pending}
               </div>
             </div>
-            <p className="text-[11px] text-ink-400">Reading the records</p>
+            <LoadingRow label="Reading the records" />
           </>
         ) : null}
 

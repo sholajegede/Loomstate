@@ -8,6 +8,7 @@ import { duration, timeAgo } from "../lib/format";
 import { LiveWatches } from "../components/Watches";
 import { AgentPanel } from "../components/AgentPanel";
 import { Chat } from "../components/Chat";
+import { Loading } from "../components/Loading";
 
 export default function LoopDetail() {
   const { loopId } = useParams();
@@ -22,7 +23,7 @@ export default function LoopDetail() {
   if (data === undefined) {
     return (
       <Page title="Loop" lede="One goal, its evidence, and the work the agent does on it.">
-        <p className="text-sm text-ink-400">Loading</p>
+        <Loading />
       </Page>
     );
   }

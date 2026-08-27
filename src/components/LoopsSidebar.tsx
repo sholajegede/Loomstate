@@ -3,6 +3,7 @@ import { NavLink } from "react-router-dom";
 import { usePaginatedQuery, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { timeAgo } from "../lib/format";
+import { LoadingRow } from "./Loading";
 
 type Status = "active" | "stalled" | "dormant" | "closed";
 type LoopType = "buying" | "research" | "planning" | "other";
@@ -130,7 +131,7 @@ export function LoopsSidebar() {
 
       <div className="mt-2 min-h-0 flex-1 overflow-y-auto pr-0.5">
         {pageStatus === "LoadingFirstPage" ? (
-          <p className="px-2 py-3 text-[11px] text-ink-400">Loading</p>
+          <LoadingRow />
         ) : results.length === 0 ? (
           <p className="px-2 py-3 text-[11px] text-ink-400">
             {filtersOn ? "No loop matches." : "No loops yet."}
@@ -185,7 +186,7 @@ export function LoopsSidebar() {
           </button>
         ) : null}
         {pageStatus === "LoadingMore" ? (
-          <p className="px-2 py-2 text-[11px] text-ink-400">Loading more</p>
+          <LoadingRow label="Loading more" />
         ) : null}
       </div>
     </div>

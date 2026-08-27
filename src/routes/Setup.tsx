@@ -4,6 +4,7 @@ import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { LoomMark } from "../components/Icons";
 import { readableError } from "../lib/errors";
+import { Loading } from "../components/Loading";
 
 const SITE_URL = import.meta.env.VITE_CONVEX_SITE_URL;
 
@@ -40,11 +41,7 @@ export default function Setup() {
   const navigate = useNavigate();
 
   if (status === undefined) {
-    return (
-      <div className="flex h-full items-center justify-center text-sm text-ink-400">
-        Loading
-      </div>
-    );
+    return <Loading />;
   }
 
   const done = status.hasKey && status.pairedBrowsers > 0;

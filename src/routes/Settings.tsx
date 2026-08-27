@@ -16,6 +16,7 @@ import {
 } from "../components/SettingsBits";
 import { timeAgo, timeUntil } from "../lib/format";
 import { readableError } from "../lib/errors";
+import { Loading } from "../components/Loading";
 
 const TIERS = [
   {
@@ -44,7 +45,7 @@ export default function Settings() {
       lede="Who you are, how much the agent may do, where Loomstate reaches you, and the keys it uses."
     >
       {settings === undefined ? (
-        <p className="text-sm text-ink-400">Loading</p>
+        <Loading />
       ) : (
         <div className="grid min-w-0 gap-4">
           <Profile data={settings.profile} />

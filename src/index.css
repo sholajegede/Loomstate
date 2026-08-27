@@ -41,3 +41,62 @@ body {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/**
+ * The loading mark weaves itself.
+ *
+ * The logo is a loom: amber warp threads held taut, teal weft threads carried
+ * across them. So the wait shows the weft being drawn through, one row after
+ * another, which is the thing Loomstate is named for rather than a spinner
+ * borrowed from somewhere else.
+ */
+@keyframes loom-weave {
+  0% {
+    stroke-dashoffset: 18;
+  }
+  45% {
+    stroke-dashoffset: 0;
+  }
+  55% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: -18;
+  }
+}
+
+@keyframes loom-warp {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.loom-weft {
+  stroke-dasharray: 18;
+  animation: loom-weave 1.8s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
+.loom-weft-2 {
+  animation-delay: 0.2s;
+}
+
+.loom-weft-3 {
+  animation-delay: 0.4s;
+}
+
+.loom-warp {
+  animation: loom-warp 1.8s ease-in-out infinite;
+}
+
+/* Someone who asked for less motion gets the mark, held still. */
+@media (prefers-reduced-motion: reduce) {
+  .loom-weft,
+  .loom-warp {
+    animation: none;
+    stroke-dasharray: none;
+  }
+}

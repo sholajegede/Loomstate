@@ -5,6 +5,7 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { EmptyState, Page } from "../components/Page";
 import { timeAgo, timeUntil } from "../lib/format";
+import { Loading, LoadingRow } from "../components/Loading";
 
 const ACTOR_TONE: Record<string, string> = {
   agent: "border-thread/40 text-thread",
@@ -159,7 +160,7 @@ export default function AuditLog() {
           ) : null}
 
           {status === "LoadingFirstPage" ? (
-            <p className="text-sm text-ink-400">Loading</p>
+            <Loading />
           ) : results.length === 0 ? (
             <EmptyState
               title="Nothing recorded here"
@@ -274,7 +275,7 @@ export default function AuditLog() {
             </button>
           ) : null}
           {status === "LoadingMore" ? (
-            <p className="mt-3 text-sm text-ink-400">Loading more</p>
+            <LoadingRow label="Loading more" />
           ) : null}
         </div>
       </div>

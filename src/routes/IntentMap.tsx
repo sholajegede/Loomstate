@@ -6,6 +6,7 @@ import { EmptyState, Page } from "../components/Page";
 import { AlivenessBar, StatusTag, TypeTag } from "../components/LoopBits";
 import { timeAgo } from "../lib/format";
 import { readableError } from "../lib/errors";
+import { Loading } from "../components/Loading";
 
 export default function IntentMap() {
   const loops = useQuery(api.loops.list);
@@ -61,7 +62,7 @@ export default function IntentMap() {
       ) : null}
 
       {loops === undefined || setup === undefined ? (
-        <p className="text-sm text-ink-400">Loading</p>
+        <Loading />
       ) : loops.length === 0 && !setup.hasKey ? (
         <NeedsSetup />
       ) : loops.length === 0 ? (

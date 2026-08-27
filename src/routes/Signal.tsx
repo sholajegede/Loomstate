@@ -2,6 +2,7 @@ import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { EmptyState, Page } from "../components/Page";
 import { duration, timeAgo } from "../lib/format";
+import { Loading } from "../components/Loading";
 
 export default function Signal() {
   const events = useQuery(api.events.recent, { limit: 80 });
@@ -25,7 +26,7 @@ export default function Signal() {
       }
     >
       {events === undefined ? (
-        <p className="text-sm text-ink-400">Loading</p>
+        <Loading />
       ) : events.length === 0 ? (
         <EmptyState
           title="No events yet"

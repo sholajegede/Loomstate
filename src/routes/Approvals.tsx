@@ -7,6 +7,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { Card, EmptyState, Page } from "../components/Page";
 import { timeAgo } from "../lib/format";
 import { readableError } from "../lib/errors";
+import { Loading } from "../components/Loading";
 
 type Payload = { to?: string[]; subject?: string; body?: string; from?: string };
 
@@ -22,7 +23,7 @@ export default function Approvals() {
       lede="Actions that commit money or cannot be undone wait here. You approve, edit, or reject each one."
     >
       {approvals === undefined ? (
-        <p className="text-sm text-ink-400">Loading</p>
+        <Loading />
       ) : approvals.length === 0 ? (
         <EmptyState
           title="Nothing waiting"
