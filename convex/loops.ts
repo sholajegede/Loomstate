@@ -135,6 +135,24 @@ export const setContact = mutation({
     await requireWorkspaceWrite(ctx, loop.workspaceId);
 
     const contact = args.contactEmail.trim().toLowerCase();
+
+    // An empty value removes the contact, so the agent stops writing to it.
+    if (contact === "") {
+      await ctx.db.patch(args.loopId, {
+        contactEmail: undefined,
+        contactSource: undefined,
+      });
+      await ctx.db.insert("auditLog", {
+        workspaceId: loop.workspaceId,
+        loopId: args.loopId,
+        actorType: "user",
+        action: "loop.clearContact",
+        detail: "The owner removed the contact for this loop.",
+        at: Date.now(),
+      });
+      return null;
+    }
+
     if (!contact.includes("@")) throw new Error("Enter an email address.");
 
     await ctx.db.patch(args.loopId, {

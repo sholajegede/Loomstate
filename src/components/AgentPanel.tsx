@@ -212,33 +212,43 @@ function Manual({
             {busy ? "The agent is working" : "Run the agent now"}
           </button>
 
-          {loop.contactEmail === undefined ? (
-            <div>
-              <p className="text-[11px] text-ink-400">
-                Set the contact by hand if the page never prints one
-              </p>
-              <div className="mt-1 flex gap-2">
-                <input
-                  value={contact}
-                  onChange={(e) => setContactDraft(e.target.value)}
-                  placeholder="seller@example.com"
-                  className="min-w-0 flex-1 rounded-lg border border-ink-700 bg-ink-900 px-3 py-1.5 text-sm outline-none focus:border-thread/60"
-                />
-                <button
-                  onClick={() => {
-                    void setContact({
-                      loopId: loop._id,
-                      contactEmail: contact.trim(),
-                    }).then(() => setContactDraft(""));
-                  }}
-                  disabled={contact.trim() === ""}
-                  className="rounded-lg border border-ink-700 px-3 py-1.5 text-sm hover:bg-ink-800 disabled:opacity-40"
-                >
-                  Set
-                </button>
-              </div>
+          <div>
+            <p className="text-[11px] text-ink-400">
+              {loop.contactEmail === undefined
+                ? "Set the contact by hand if the page never prints one"
+                : "Replace the contact Loomstate read off the page"}
+            </p>
+            <div className="mt-1 flex gap-2">
+              <input
+                value={contact}
+                onChange={(e) => setContactDraft(e.target.value)}
+                placeholder={loop.contactEmail ?? "seller@example.com"}
+                className="min-w-0 flex-1 rounded-lg border border-ink-700 bg-ink-900 px-3 py-1.5 text-sm outline-none focus:border-thread/60"
+              />
+              <button
+                onClick={() => {
+                  void setContact({
+                    loopId: loop._id,
+                    contactEmail: contact.trim(),
+                  }).then(() => setContactDraft(""));
+                }}
+                disabled={contact.trim() === ""}
+                className="rounded-lg border border-ink-700 px-3 py-1.5 text-sm hover:bg-ink-800 disabled:opacity-40"
+              >
+                Set
+              </button>
             </div>
-          ) : null}
+            {loop.contactEmail !== undefined ? (
+              <button
+                onClick={() =>
+                  void setContact({ loopId: loop._id, contactEmail: "" })
+                }
+                className="mt-1.5 text-[11px] text-ink-400 hover:text-alarm"
+              >
+                Remove this contact
+              </button>
+            ) : null}
+          </div>
 
           {live !== null ? (
             <button

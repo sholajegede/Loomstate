@@ -24,6 +24,7 @@ export function LiveWatches({
   const data = useQuery(api.watches.forLoop, { loopId });
   const create = useMutation(api.watches.create);
   const setInterval = useMutation(api.watches.setInterval);
+  const setActive = useMutation(api.watches.setActive);
   const checkLoop = useAction(api.watches.checkLoopNow);
   const markSeen = useMutation(api.watches.markDiffsSeen);
   const [draft, setDraft] = useState("");
@@ -123,6 +124,18 @@ export function LiveWatches({
                   <span className="w-16 shrink-0 text-right text-[11px] text-ink-400">
                     {watch.lastCrawlAt ? timeAgo(watch.lastCrawlAt) : "not read"}
                   </span>
+                  <button
+                    onClick={() =>
+                      void setActive({
+                        watchId: watch._id,
+                        active: !watch.active,
+                      })
+                    }
+                    title={watch.active ? "Stop watching this page" : "Watch again"}
+                    className="shrink-0 rounded border border-ink-800 px-1.5 py-0.5 text-[11px] text-ink-400 hover:border-alarm/50 hover:text-alarm"
+                  >
+                    {watch.active ? "Stop" : "Resume"}
+                  </button>
                 </div>
                 {watch.excerpt ? (
                   <p className="mt-1 pl-3.5 text-xs text-ink-400">{watch.excerpt}</p>

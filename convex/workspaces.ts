@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import {
   getOwnedWorkspace,
   getUser,
@@ -143,5 +143,51 @@ export const setDefaults = mutation({
       at: Date.now(),
     });
     return null;
+  },
+});
+
+/**
+ * Adopts standing authority on a workspace that pre-dates the setting. Loops
+ * built before the setting existed carry the old "watch" default, which would
+ * leave them sitting still forever. This lifts them to the workspace default
+ * once, and never touches a workspace whose owner has already chosen.
+ */
+export const adoptStandingAuthority = internalMutation({
+  args: {},
+  returns: v.object({ workspaces: v.number(), loops: v.number() }),
+  handler: async (ctx) => {
+    const workspaces = await ctx.db.query("workspaces").take(200);
+    let touchedWorkspaces = 0;
+    let touchedLoops = 0;
+
+    for (const workspace of workspaces) {
+      if (workspace.defaultTier !== undefined) continue;
+
+      await ctx.db.patch(workspace._id, {
+        defaultTier: "act",
+        autopilot: workspace.autopilot ?? true,
+      });
+      touchedWorkspaces += 1;
+
+      const loops = await ctx.db
+        .query("loops")
+        .withIndex("by_workspace", (q) => q.eq("workspaceId", workspace._id))
+        .collect();
+      for (const loop of loops) {
+        if (loop.status === "closed" || loop.tier !== "watch") continue;
+        await ctx.db.patch(loop._id, { tier: "act" });
+        touchedLoops += 1;
+      }
+
+      await ctx.db.insert("auditLog", {
+        workspaceId: workspace._id,
+        actorType: "system",
+        action: "workspace.adoptAuthority",
+        detail: `Loomstate applied standing act authority to ${touchedLoops} existing loops.`,
+        at: Date.now(),
+      });
+    }
+
+    return { workspaces: touchedWorkspaces, loops: touchedLoops };
   },
 });
