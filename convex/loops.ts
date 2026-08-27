@@ -381,6 +381,7 @@ export const remove = mutation({
     diffs: v.number(),
     auditEntries: v.number(),
     eventsDetached: v.number(),
+    manualEventsRemoved: v.number(),
   }),
   handler: async (ctx, args) => {
     const loop = await ctx.db.get(args.loopId);
@@ -398,6 +399,7 @@ const purgeCounts = v.object({
   diffs: v.number(),
   auditEntries: v.number(),
   eventsDetached: v.number(),
+  manualEventsRemoved: v.number(),
 });
 
 /**
@@ -420,6 +422,7 @@ type PurgeCounts = {
   diffs: number;
   auditEntries: number;
   eventsDetached: number;
+  manualEventsRemoved: number;
 };
 
 async function purgeLoop(
@@ -441,6 +444,7 @@ async function purgeLoop(
       diffs: 0,
       auditEntries: 0,
       eventsDetached: 0,
+      manualEventsRemoved: 0,
     };
 
     for (const message of await ctx.db

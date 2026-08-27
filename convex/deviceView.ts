@@ -288,3 +288,24 @@ export const capture = internalMutation({
     };
   },
 });
+
+/**
+ * Removes manual capture events that no longer belong to a loop. A page filed
+ * by hand only means something as part of its loop, so an orphan left by an
+ * older removal is cleared rather than seeding a loop nobody asked for.
+ */
+export const clearOrphanedCaptures = internalMutation({
+  args: {},
+  returns: v.object({ removed: v.number() }),
+  handler: async (ctx) => {
+    const events = await ctx.db.query("events").take(1000);
+    let removed = 0;
+    for (const event of events) {
+      if (event.kind === "manual" && event.loopId === undefined) {
+        await ctx.db.delete(event._id);
+        removed += 1;
+      }
+    }
+    return { removed };
+  },
+});
