@@ -7,6 +7,7 @@ import { AlivenessBar, StatusTag, TypeTag } from "../components/LoopBits";
 import { duration, timeAgo } from "../lib/format";
 import { LiveWatches } from "../components/Watches";
 import { AgentPanel } from "../components/AgentPanel";
+import { Chat } from "../components/Chat";
 
 export default function LoopDetail() {
   const { loopId } = useParams();
@@ -72,6 +73,10 @@ export default function LoopDetail() {
               </p>
             ) : null}
           </Card>
+
+          <div className="flex h-[26rem] flex-col overflow-hidden rounded-xl border border-ink-800 bg-ink-900/60">
+            <Chat loopId={loop._id} title="Ask about this loop" />
+          </div>
 
           <LiveWatches loopId={loop._id} sourceUrls={loop.sourceUrls} />
 

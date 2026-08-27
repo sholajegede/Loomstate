@@ -371,6 +371,25 @@ export default defineSchema({
   }).index("by_workspace_provider", ["workspaceId", "provider"]),
 
   /**
+   * The chat a person holds with Loomstate about their loops. A turn here is a
+   * question and an answer over records that already exist. Nothing in this
+   * table changes what an agent does.
+   */
+  chatTurns: defineTable({
+    workspaceId: v.id("workspaces"),
+    // Set for a chat opened from one loop. Absent for the workspace chat.
+    loopId: v.optional(v.id("loops")),
+    role: v.union(v.literal("user"), v.literal("assistant")),
+    text: v.string(),
+    // What the answer was built from, so a reader can check it.
+    sources: v.optional(v.array(v.string())),
+    model: v.optional(v.string()),
+    at: v.number(),
+  })
+    .index("by_loop_time", ["loopId", "at"])
+    .index("by_workspace_scope_time", ["workspaceId", "loopId", "at"]),
+
+  /**
    * Things the owner must be told about, on whatever device they have. The
    * extension drains this so a waiting approval reaches them with the app shut.
    */

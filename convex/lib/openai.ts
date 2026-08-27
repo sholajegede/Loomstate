@@ -85,3 +85,58 @@ export async function askForJson<T>(
 
   throw new Error(lastError);
 }
+
+/**
+ * Sends a short conversation and returns the reply as plain text. The chat
+ * surface uses this: it answers a person in prose, not in a schema.
+ */
+export async function askForText(
+  apiKey: string,
+  args: {
+    system: string;
+    turns: { role: "user" | "assistant"; content: string }[];
+    maxTokens?: number;
+  },
+): Promise<{ text: string; model: string }> {
+  let lastError = "OpenAI did not answer.";
+
+  for (const model of modelChain()) {
+    const body: Record<string, unknown> = {
+      model,
+      messages: [{ role: "system", content: args.system }, ...args.turns],
+      max_completion_tokens: args.maxTokens ?? 900,
+    };
+
+    const response = await fetch(ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (response.ok) {
+      const payload = (await response.json()) as {
+        choices: { message: { content: string } }[];
+      };
+      const text = (payload.choices[0]?.message?.content ?? "").trim();
+      if (text === "") {
+        lastError = "OpenAI returned an empty reply.";
+        continue;
+      }
+      return { text, model };
+    }
+
+    const detail = await response.text();
+    const retryable =
+      response.status === 404 ||
+      detail.includes("model_not_found") ||
+      detail.includes("does not exist") ||
+      detail.includes("max_completion_tokens");
+    lastError = `OpenAI returned ${response.status}. ${detail.slice(0, 300)}`;
+    if (!retryable) break;
+  }
+
+  throw new Error(lastError);
+}

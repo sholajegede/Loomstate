@@ -10,6 +10,7 @@ import {
   LoomMark,
   MapIcon,
   SignalIcon,
+  ChatIcon,
 } from "./components/Icons";
 import IntentMap from "./routes/IntentMap";
 import LoopDetail from "./routes/LoopDetail";
@@ -19,9 +20,11 @@ import Settings from "./routes/Settings";
 import Signal from "./routes/Signal";
 import SignIn from "./routes/SignIn";
 import { LoopsSidebar } from "./components/LoopsSidebar";
+import AskLoomstate from "./routes/AskLoomstate";
 
 const nav = [
   { to: "/", label: "Intent map", icon: MapIcon, end: true },
+  { to: "/ask", label: "Ask Loomstate", icon: ChatIcon, end: false },
   { to: "/signal", label: "Signal", icon: SignalIcon, end: false },
   { to: "/approvals", label: "Approvals", icon: InboxIcon, end: false },
   { to: "/audit", label: "Audit log", icon: LedgerIcon, end: false },
@@ -71,6 +74,7 @@ function Workspace() {
         <Routes>
           <Route path="/" element={<IntentMap />} />
           <Route path="/loops/:loopId" element={<LoopDetail />} />
+          <Route path="/ask" element={<AskLoomstate />} />
           <Route path="/signal" element={<Signal />} />
           <Route path="/approvals" element={<Approvals />} />
           <Route path="/audit" element={<AuditLog />} />
