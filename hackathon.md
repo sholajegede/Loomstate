@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5-mini by default, with gpt-4.1-mini and gpt-4o-mini as fallbacks. The chat model is chosen by the owner from what their own key reaches.
 - **Started:** 2026-08-26T21:21:20Z
-- **Last updated:** 2026-08-27T15:55:00Z
+- **Last updated:** 2026-08-27T20:30:00Z
 
 ## Log
 
@@ -389,3 +389,37 @@ so a chat model was being offered an effort setting it does not have; the rule
 now covers every point version. The second: a reasoning model can still refuse a
 particular effort value, which would have failed the answer outright, so a
 refusal on that parameter now drops it and asks the same model again.
+
+### 2026-08-27 - answering from the browser
+An action that needs a decision now reaches the person wherever they are
+browsing, and can be answered without opening the app.
+
+The extension raises a notification carrying the loop, the proposed action, and
+why it is waiting. **Approve** and **Reject** sit on the notification itself.
+The popup shows the same actions in full, with a box for a note.
+
+A device token is a bearer token in extension storage, which is a weaker
+credential than the passkey session the web app holds, so it is given less
+authority. It may reject anything, and it may approve an action that needs no
+step-up. It may never release money or a one-way action: the endpoint refuses
+and answers with a link that opens the app at that action, where the passkey
+check happens. The gate is unchanged; it is just reachable from one more place.
+
+Both routes end in the same function. The web action checks the person is
+signed in, the device route checks the token, and each then calls one shared
+body that sends the email, marks the approval, and writes the audit entries. The
+trails come out identical.
+
+Confirmed against the live deployment. A device token holding a real pairing was
+refused on a money-committing action and handed back the app link; the action
+stayed pending until the passkey check was done in the web app. A non-gated
+action approved from the device in one call and sent. A rejection from the
+device recorded the note and closed the action, and a second decision on it was
+refused. The two trails match entry for entry, apart from the step-up entries
+the gated one correctly carries.
+
+Testing found a provenance bug worth naming. Recording a note was also stamping
+where the decision was made, so an action annotated from the extension and then
+approved in the web app after a passkey check was filed as decided by the
+extension. A note is not a decision. The origin is now written when the action
+is actually released.
