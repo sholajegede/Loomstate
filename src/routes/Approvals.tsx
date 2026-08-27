@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { usePasskeyAuth } from "@convex-dev/auth/react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
@@ -12,6 +12,9 @@ type Payload = { to?: string[]; subject?: string; body?: string; from?: string }
 
 export default function Approvals() {
   const approvals = useQuery(api.approvals.pending);
+  // The extension hands a step-up action over by opening this page at it.
+  const [params] = useSearchParams();
+  const focused = params.get("approval");
 
   return (
     <Page
@@ -28,7 +31,11 @@ export default function Approvals() {
       ) : (
         <div className="space-y-4">
           {approvals.map((approval) => (
-            <ApprovalCard key={approval._id} approval={approval} />
+            <ApprovalCard
+              key={approval._id}
+              approval={approval}
+              focused={approval._id === focused}
+            />
           ))}
         </div>
       )}
@@ -38,10 +45,12 @@ export default function Approvals() {
 
 function ApprovalCard({
   approval,
+  focused = false,
 }: {
   approval: NonNullable<
     ReturnType<typeof useQuery<typeof api.approvals.pending>>
   >[number];
+  focused?: boolean;
 }) {
   const approve = useAction(api.approvals.approveAndSend);
   const reject = useMutation(api.approvals.reject);
@@ -60,6 +69,11 @@ function ApprovalCard({
     approval.stepUpConfirmedAt !== undefined &&
     Date.now() - approval.stepUpConfirmedAt < 5 * 60 * 1000;
   const gated = approval.stepUpRequired && !stepUpFresh;
+
+  const card = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (focused) card.current?.scrollIntoView({ block: "center" });
+  }, [focused]);
 
   async function doStepUp() {
     setBusy(true);
@@ -97,7 +111,13 @@ function ApprovalCard({
   }
 
   return (
-    <Card>
+    <div ref={card}>
+      <Card className={focused ? "border-thread/50 ring-1 ring-thread/30" : ""}>
+      {focused ? (
+        <p className="mb-3 rounded-lg border border-thread/30 bg-thread/5 px-3 py-2 text-xs text-ink-200">
+          Your browser sent you here to finish this one.
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <Link
@@ -227,7 +247,8 @@ function ApprovalCard({
           Reject
         </button>
       </div>
-    </Card>
+      </Card>
+    </div>
   );
 }
 

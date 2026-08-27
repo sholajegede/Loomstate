@@ -22,7 +22,122 @@ async function load() {
     $("status").classList.toggle("live", stored.paused !== true);
     $("pairing").classList.add("hidden");
     await refreshCounts(stored.endpoint, stored.token);
+    await loadApprovals(stored.endpoint, stored.token);
   }
+}
+
+/**
+ * Shows what is waiting and lets the person answer it here. Approving an
+ * action that needs a passkey opens the web app, because only that origin can
+ * ask for one.
+ */
+async function loadApprovals(endpoint, token) {
+  const holder = $("approvals");
+  let approvals = [];
+  try {
+    const response = await fetch(`${endpoint}/x/approvals`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) return;
+    const payload = await response.json();
+    approvals = payload.approvals ?? [];
+  } catch {
+    return;
+  }
+
+  holder.textContent = "";
+  if (approvals.length === 0) {
+    holder.classList.add("hidden");
+    return;
+  }
+  holder.classList.remove("hidden");
+
+  for (const approval of approvals) {
+    holder.appendChild(renderApproval(approval, endpoint, token));
+  }
+}
+
+function tag(text, hot) {
+  const el = document.createElement("span");
+  el.className = hot ? "tag hot" : "tag";
+  el.textContent = text;
+  return el;
+}
+
+function renderApproval(approval, endpoint, token) {
+  const card = document.createElement("div");
+  card.className = "approval";
+
+  const loop = document.createElement("p");
+  loop.className = "loop";
+  loop.textContent = approval.loopTitle;
+  card.appendChild(loop);
+
+  const subject = document.createElement("p");
+  subject.className = "subject";
+  subject.textContent = approval.subject;
+  card.appendChild(subject);
+
+  const reason = document.createElement("p");
+  reason.className = "reason";
+  reason.textContent = approval.reason;
+  card.appendChild(reason);
+
+  const tags = document.createElement("div");
+  tags.className = "tags";
+  tags.appendChild(tag(`${approval.riskLevel} risk`, approval.riskLevel === "high"));
+  if (approval.commitsMoney) tags.appendChild(tag("commits money", true));
+  if (!approval.reversible) tags.appendChild(tag("cannot undo", true));
+  if (approval.stepUpRequired) tags.appendChild(tag("needs passkey", true));
+  card.appendChild(tags);
+
+  const note = document.createElement("textarea");
+  note.rows = 2;
+  note.placeholder = "Add a note (optional)";
+  card.appendChild(note);
+
+  const row = document.createElement("div");
+  row.className = "row";
+
+  const approve = document.createElement("button");
+  approve.textContent = approval.stepUpRequired ? "Approve with passkey" : "Approve";
+  approve.addEventListener("click", async () => {
+    approve.disabled = true;
+    const result = await chrome.runtime.sendMessage({
+      type: "loomstate:decide",
+      approvalId: approval._id,
+      decision: "approve",
+      note: note.value,
+    });
+    if (result && result.needsStepUp && result.url) {
+      await chrome.tabs.create({ url: result.url });
+      window.close();
+      return;
+    }
+    setMessage(result?.detail ?? "Loomstate answered.", result?.ok === false);
+    await load();
+  });
+
+  const reject = document.createElement("button");
+  reject.className = "danger";
+  reject.textContent = "Reject";
+  reject.addEventListener("click", async () => {
+    reject.disabled = true;
+    const result = await chrome.runtime.sendMessage({
+      type: "loomstate:decide",
+      approvalId: approval._id,
+      decision: "reject",
+      note: note.value,
+    });
+    setMessage(result?.detail ?? "Loomstate answered.", result?.ok === false);
+    await load();
+  });
+
+  row.appendChild(approve);
+  row.appendChild(reject);
+  card.appendChild(row);
+  return card;
 }
 
 async function refreshCounts(endpoint, token) {

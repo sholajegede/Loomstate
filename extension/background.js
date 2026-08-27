@@ -121,6 +121,17 @@ async function pullNotifications() {
 
   for (const item of payload.notifications ?? []) {
     const id = `${NOTIFY_PREFIX}${item.id}`;
+
+    // An action still waiting can be answered from the notification itself.
+    // Anything else is only a link to open.
+    const answerable = typeof item.approvalId === "string";
+    const buttons = answerable
+      ? [
+          { title: item.stepUpRequired ? "Approve with passkey" : "Approve" },
+          { title: "Reject" },
+        ]
+      : undefined;
+
     chrome.notifications.create(id, {
       type: "basic",
       iconUrl: chrome.runtime.getURL("icons/icon128.png"),
@@ -128,16 +139,77 @@ async function pullNotifications() {
       message: item.body,
       priority: 2,
       requireInteraction: true,
+      ...(buttons ? { buttons } : {}),
     });
-    // Remember where this notification points, so a click opens the right page.
-    await chrome.storage.local.set({ [id]: item.url });
+
+    // Remember what this notification is about, so a click or a button press
+    // knows which action to answer and where to send the person.
+    await chrome.storage.local.set({
+      [id]: {
+        url: item.url,
+        approvalId: item.approvalId ?? null,
+        stepUpRequired: item.stepUpRequired === true,
+      },
+    });
   }
 }
+
+/** Answers one waiting action. Returns what the server said. */
+async function decide(approvalId, decision, note) {
+  const { endpoint, token } = await settings();
+  if (endpoint === "" || token === "") {
+    return { ok: false, detail: "This browser is not paired." };
+  }
+  try {
+    const response = await fetch(`${endpoint}/x/decide`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ approvalId, decision, note: note ?? "" }),
+    });
+    return await response.json();
+  } catch (error) {
+    return { ok: false, detail: String(error) };
+  }
+}
+
+/** Tells the person what happened, without another round trip. */
+function report(text) {
+  chrome.notifications.create(`${NOTIFY_PREFIX}result-${Date.now()}`, {
+    type: "basic",
+    iconUrl: chrome.runtime.getURL("icons/icon128.png"),
+    title: "Loomstate",
+    message: text,
+    priority: 1,
+  });
+}
+
+chrome.notifications.onButtonClicked.addListener(async (id, index) => {
+  if (!id.startsWith(NOTIFY_PREFIX)) return;
+  const stored = await chrome.storage.local.get(id);
+  const meta = stored[id];
+  if (!meta || !meta.approvalId) return;
+
+  chrome.notifications.clear(id);
+  const decision = index === 0 ? "approve" : "reject";
+  const result = await decide(meta.approvalId, decision);
+
+  // Releasing money needs the passkey, which only the app origin can ask for.
+  if (result && result.needsStepUp && result.url) {
+    await chrome.tabs.create({ url: result.url });
+  } else {
+    report(result?.detail ?? "Loomstate answered.");
+  }
+  await chrome.storage.local.remove(id);
+});
 
 chrome.notifications.onClicked.addListener(async (id) => {
   if (!id.startsWith(NOTIFY_PREFIX)) return;
   const stored = await chrome.storage.local.get(id);
-  const url = stored[id];
+  const meta = stored[id];
+  const url = typeof meta === "string" ? meta : meta?.url;
   if (url) await chrome.tabs.create({ url });
   chrome.notifications.clear(id);
   await chrome.storage.local.remove(id);
@@ -172,6 +244,16 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "loomstate:queueSize") {
     sendResponse({ size: queue.length });
     return false;
+  }
+  if (message?.type === "loomstate:decide") {
+    void decide(message.approvalId, message.decision, message.note).then(
+      sendResponse,
+    );
+    return true;
+  }
+  if (message?.type === "loomstate:pull") {
+    void pullNotifications().then(() => sendResponse({ ok: true }));
+    return true;
   }
   return false;
 });

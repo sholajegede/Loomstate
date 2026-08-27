@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import {
   action,
+  internalAction,
   internalMutation,
   internalQuery,
   mutation,
@@ -261,19 +262,23 @@ export const assertOwner = internalQuery({
  * Approves an action and carries it out. The step-up gate is enforced here,
  * on the server, not in the interface.
  */
-export const approveAndSend = action({
+/**
+ * Carries out an approval that has already been authorised.
+ *
+ * Both ways of approving end here: the web app after its own sign-in check,
+ * and a paired browser after its device check. Sharing this one body is what
+ * makes the two identical, down to the audit entries they leave behind.
+ *
+ * The caller proves who it is. This function does not, so nothing may call it
+ * without checking first.
+ */
+export const execute = internalAction({
   args: { approvalId: v.id("approvals") },
   returns: v.object({ ok: v.boolean(), detail: v.string() }),
   handler: async (
     ctx,
     args,
   ): Promise<{ ok: boolean; detail: string }> => {
-    const userId = await getAuthUserId(ctx);
-    if (userId === null) throw new Error("Not signed in.");
-    await ctx.runQuery(internal.approvals.assertOwner, {
-      approvalId: args.approvalId,
-    });
-
     const approval = await ctx.runQuery(internal.approvals.readForSend, {
       approvalId: args.approvalId,
     });
@@ -347,5 +352,185 @@ export const approveAndSend = action({
       ok: true,
       detail: `The agent sent the email to ${payload.to.join(", ")} from ${approval.inboxAddress}.`,
     };
+  },
+});
+
+/**
+ * Approves an action from the web app, where the person is signed in and the
+ * step-up passkey check happens.
+ */
+export const approveAndSend = action({
+  args: { approvalId: v.id("approvals") },
+  returns: v.object({ ok: v.boolean(), detail: v.string() }),
+  handler: async (ctx, args): Promise<{ ok: boolean; detail: string }> => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new Error("Not signed in.");
+    await ctx.runQuery(internal.approvals.assertOwner, {
+      approvalId: args.approvalId,
+    });
+    return await ctx.runAction(internal.approvals.execute, {
+      approvalId: args.approvalId,
+    });
+  },
+});
+
+// --- deciding from a paired browser ---------------------------------------
+
+/**
+ * What a paired browser may see and do about the actions waiting.
+ *
+ * A device token is a bearer token sitting in extension storage. It is a
+ * weaker credential than the passkey session the web app holds, so it gets
+ * less authority: it may reject anything, and it may approve an action that
+ * does not need a step-up. Releasing money or anything one-way still needs the
+ * passkey, which only the app origin can ask for.
+ */
+
+const deviceApprovalShape = v.object({
+  _id: v.id("approvals"),
+  loopId: v.id("loops"),
+  loopTitle: v.string(),
+  agentAddress: v.string(),
+  reason: v.string(),
+  riskLevel: v.string(),
+  commitsMoney: v.boolean(),
+  reversible: v.boolean(),
+  stepUpRequired: v.boolean(),
+  subject: v.string(),
+  to: v.array(v.string()),
+  body: v.string(),
+  createdAt: v.number(),
+});
+
+/** Pending approvals for a workspace, shaped for the extension. */
+export const pendingForDevice = internalQuery({
+  args: { workspaceId: v.id("workspaces") },
+  returns: v.array(deviceApprovalShape),
+  handler: async (ctx, args) => {
+    const rows = await ctx.db
+      .query("approvals")
+      .withIndex("by_workspace_status", (q) =>
+        q.eq("workspaceId", args.workspaceId).eq("status", "pending"),
+      )
+      .order("desc")
+      .take(20);
+
+    const out = [];
+    for (const row of rows) {
+      const loop = await ctx.db.get(row.loopId);
+      const agent = await ctx.db.get(row.agentId);
+      const payload = (row.editedPayload ?? row.actionPayload) as {
+        subject?: string;
+        to?: string[];
+        body?: string;
+      };
+      out.push({
+        _id: row._id,
+        loopId: row.loopId,
+        loopTitle: loop?.title ?? "a loop",
+        agentAddress: agent?.inboxAddress ?? "the agent",
+        reason: row.reason,
+        riskLevel: row.riskLevel,
+        commitsMoney: row.commitsMoney,
+        reversible: row.reversible,
+        stepUpRequired: row.stepUpRequired,
+        subject: payload.subject ?? "",
+        to: payload.to ?? [],
+        body: (payload.body ?? "").slice(0, 1200),
+        createdAt: row.createdAt,
+      });
+    }
+    return out;
+  },
+});
+
+/** Checks an approval belongs to this workspace, and reports how it is gated. */
+export const gateForDevice = internalQuery({
+  args: {
+    approvalId: v.id("approvals"),
+    workspaceId: v.id("workspaces"),
+  },
+  returns: v.union(
+    v.null(),
+    v.object({
+      status: v.string(),
+      stepUpRequired: v.boolean(),
+      loopId: v.id("loops"),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const approval = await ctx.db.get(args.approvalId);
+    if (approval === null) return null;
+    if (approval.workspaceId !== args.workspaceId) return null;
+    return {
+      status: approval.status,
+      stepUpRequired: approval.stepUpRequired,
+      loopId: approval.loopId,
+    };
+  },
+});
+
+/** Records a note the person typed with their decision. */
+export const noteDecision = internalMutation({
+  args: {
+    approvalId: v.id("approvals"),
+    note: v.string(),
+    via: v.union(v.literal("web"), v.literal("extension")),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const approval = await ctx.db.get(args.approvalId);
+    if (approval === null) return null;
+    const note = args.note.trim().slice(0, 500);
+    // Where the decision was made is worth recording even with no note.
+    await ctx.db.patch(args.approvalId, {
+      decidedVia: args.via,
+      ...(note === "" ? {} : { decisionNote: note }),
+    });
+    if (note === "") return null;
+
+    await ctx.db.insert("auditLog", {
+      workspaceId: approval.workspaceId,
+      loopId: approval.loopId,
+      approvalId: args.approvalId,
+      actorType: "user",
+      action: "approval.note",
+      detail: `The owner added a note from the ${args.via}: ${note}`,
+      at: Date.now(),
+    });
+    return null;
+  },
+});
+
+/** Rejects from a paired browser. Rejection is the safe direction, so a device may do it. */
+export const rejectFromDevice = internalMutation({
+  args: { approvalId: v.id("approvals"), workspaceId: v.id("workspaces") },
+  returns: v.object({ ok: v.boolean(), detail: v.string() }),
+  handler: async (ctx, args) => {
+    const approval = await ctx.db.get(args.approvalId);
+    if (approval === null || approval.workspaceId !== args.workspaceId) {
+      return { ok: false, detail: "That action is not in this workspace." };
+    }
+    if (approval.status !== "pending") {
+      return { ok: false, detail: "This action is already decided." };
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(args.approvalId, {
+      status: "rejected",
+      decidedAt: now,
+      decidedBy: (await ctx.db.get(approval.workspaceId))?.ownerId,
+      decidedVia: "extension",
+    });
+    await ctx.db.insert("auditLog", {
+      workspaceId: approval.workspaceId,
+      loopId: approval.loopId,
+      approvalId: args.approvalId,
+      actorType: "user",
+      action: "approval.reject",
+      detail: "The owner rejected this action.",
+      at: now,
+    });
+    return { ok: true, detail: "Loomstate rejected the action." };
   },
 });

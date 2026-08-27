@@ -119,3 +119,96 @@ button.ghost {
 .message.error {
   color: var(--alarm);
 }
+
+.approvals {
+  margin-bottom: 12px;
+}
+
+.approval {
+  border: 1px solid var(--ink-700);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 8px;
+}
+
+.approval .loop {
+  font-size: 11px;
+  color: var(--ink-400);
+  margin: 0 0 3px;
+}
+
+.approval .subject {
+  font-size: 12px;
+  margin: 0 0 4px;
+  line-height: 1.35;
+}
+
+.approval .reason {
+  font-size: 11px;
+  color: var(--ink-400);
+  margin: 0 0 8px;
+  line-height: 1.35;
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.tag {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--ink-700);
+  border-radius: 999px;
+  padding: 2px 6px;
+  color: var(--ink-400);
+}
+
+.tag.hot {
+  border-color: var(--alarm);
+  color: var(--alarm);
+}
+
+.approval textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--ink-800);
+  border: 1px solid var(--ink-700);
+  border-radius: 6px;
+  color: var(--ink-100);
+  padding: 6px 8px;
+  font-size: 11px;
+  font-family: inherit;
+  resize: none;
+  margin-bottom: 8px;
+}
+
+.approval textarea:focus {
+  outline: none;
+  border-color: var(--thread);
+}
+
+.row {
+  display: flex;
+  gap: 6px;
+}
+
+.row button {
+  padding: 6px;
+  font-size: 11px;
+}
+
+button.danger {
+  background: transparent;
+  border: 1px solid var(--ink-700);
+  color: var(--ink-100);
+  font-weight: 500;
+}
+
+button.danger:hover {
+  border-color: var(--alarm);
+  color: var(--alarm);
+}

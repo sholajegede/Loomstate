@@ -333,6 +333,9 @@ export default defineSchema({
     editedPayload: v.optional(v.any()),
     // Stamped once, so an approval is announced exactly one time.
     notifiedAt: v.optional(v.number()),
+    // What the person said when they decided, and where they decided it.
+    decisionNote: v.optional(v.string()),
+    decidedVia: v.optional(v.union(v.literal("web"), v.literal("extension"))),
   })
     .index("by_workspace_status", ["workspaceId", "status"])
     .index("by_loop", ["loopId"]),

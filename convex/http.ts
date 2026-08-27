@@ -1,6 +1,7 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { auth } from "./auth";
 import { sha256Hex } from "./lib/hash";
 import { verifyWebhook } from "./lib/agentmail";
@@ -15,6 +16,11 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
   "Access-Control-Max-Age": "86400",
 };
+
+/** Where the web app is served, for a link the extension can open. */
+function appOrigin(): string {
+  return (process.env.SITE_URL ?? "").replace(/\/+$/, "");
+}
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -36,6 +42,8 @@ const preflight = httpAction(async () => new Response(null, { status: 204, heade
 http.route({ path: "/x/events", method: "OPTIONS", handler: preflight });
 http.route({ path: "/x/state", method: "OPTIONS", handler: preflight });
 http.route({ path: "/x/notifications", method: "OPTIONS", handler: preflight });
+http.route({ path: "/x/approvals", method: "OPTIONS", handler: preflight });
+http.route({ path: "/x/decide", method: "OPTIONS", handler: preflight });
 
 /** The extension posts browsing events here. */
 http.route({
@@ -112,13 +120,116 @@ http.route({
     }
 
     return json({
+      appUrl: appOrigin(),
       notifications: pending.map((n) => ({
         id: n._id,
         title: n.title,
         body: n.body,
         url: n.url,
+        approvalId: n.approvalId,
+        stepUpRequired: n.stepUpRequired === true,
+        loopTitle: n.loopTitle,
       })),
     });
+  }),
+});
+
+/** The extension lists what is waiting for a decision. */
+http.route({
+  path: "/x/approvals",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const auth = await resolveDevice(request);
+    if (auth === null) return json({ error: "Missing device token." }, 401);
+    const device = await ctx.runQuery(internal.ingest.deviceByTokenHash, auth);
+    if (device === null) return json({ error: "Unknown or stopped device." }, 401);
+
+    const approvals = await ctx.runQuery(internal.approvals.pendingForDevice, {
+      workspaceId: device.workspaceId,
+    });
+    return json({ approvals, appUrl: appOrigin() });
+  }),
+});
+
+/**
+ * The extension decides an action without opening the web app.
+ *
+ * A device token may reject anything, and may approve an action that needs no
+ * step-up. It may never approve one that does: releasing money or a one-way
+ * action needs the passkey, and only the app origin can ask for that. In that
+ * case this answers with the link that does.
+ */
+http.route({
+  path: "/x/decide",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const auth = await resolveDevice(request);
+    if (auth === null) return json({ error: "Missing device token." }, 401);
+    const device = await ctx.runQuery(internal.ingest.deviceByTokenHash, auth);
+    if (device === null) return json({ error: "Unknown or stopped device." }, 401);
+
+    let body: { approvalId?: string; decision?: string; note?: string };
+    try {
+      body = await request.json();
+    } catch {
+      return json({ error: "Body must be JSON." }, 400);
+    }
+    if (typeof body.approvalId !== "string") {
+      return json({ error: "Name the approval to decide." }, 400);
+    }
+    if (body.decision !== "approve" && body.decision !== "reject") {
+      return json({ error: "The decision must be approve or reject." }, 400);
+    }
+
+    const approvalId = body.approvalId as Id<"approvals">;
+    const gate = await ctx.runQuery(internal.approvals.gateForDevice, {
+      approvalId,
+      workspaceId: device.workspaceId,
+    });
+    if (gate === null) {
+      return json({ error: "That action is not in this workspace." }, 404);
+    }
+    if (gate.status !== "pending") {
+      return json({ ok: false, detail: "This action is already decided." });
+    }
+
+    if (typeof body.note === "string" && body.note.trim() !== "") {
+      await ctx.runMutation(internal.approvals.noteDecision, {
+        approvalId,
+        note: body.note,
+        via: "extension",
+      });
+    }
+
+    if (body.decision === "reject") {
+      const result = await ctx.runMutation(internal.approvals.rejectFromDevice, {
+        approvalId,
+        workspaceId: device.workspaceId,
+      });
+      return json(result);
+    }
+
+    // A step-up action is never released by a device token. The person
+    // finishes it on the app origin, where the passkey check happens.
+    if (gate.stepUpRequired) {
+      return json({
+        ok: false,
+        needsStepUp: true,
+        url: `${appOrigin()}/approvals?approval=${approvalId}`,
+        detail:
+          "This action needs your passkey. Loomstate is opening it for you to confirm.",
+      });
+    }
+
+    await ctx.runMutation(internal.approvals.noteDecision, {
+      approvalId,
+      note: "",
+      via: "extension",
+    });
+    const result = await ctx.runAction(internal.approvals.execute, {
+      approvalId,
+    });
+    return json(result);
   }),
 });
 

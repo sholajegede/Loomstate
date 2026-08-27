@@ -146,6 +146,9 @@ export const pendingFor = internalQuery({
       body: v.string(),
       url: v.string(),
       createdAt: v.number(),
+      approvalId: v.optional(v.id("approvals")),
+      stepUpRequired: v.optional(v.boolean()),
+      loopTitle: v.optional(v.string()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -155,13 +158,28 @@ export const pendingFor = internalQuery({
         q.eq("workspaceId", args.workspaceId).eq("deliveredAt", undefined),
       )
       .take(10);
-    return rows.map((r) => ({
-      _id: r._id,
-      title: r.title,
-      body: r.body,
-      url: r.url,
-      createdAt: r.createdAt,
-    }));
+    // The extension needs to know whether a notification can be answered from
+    // the browser, and whether approving it needs the passkey.
+    const out = [];
+    for (const r of rows) {
+      const approval =
+        r.approvalId === undefined ? null : await ctx.db.get(r.approvalId);
+      const loop = r.loopId === undefined ? null : await ctx.db.get(r.loopId);
+      out.push({
+        _id: r._id,
+        title: r.title,
+        body: r.body,
+        url: r.url,
+        createdAt: r.createdAt,
+        approvalId:
+          approval !== null && approval.status === "pending"
+            ? r.approvalId
+            : undefined,
+        stepUpRequired: approval?.stepUpRequired,
+        loopTitle: loop?.title,
+      });
+    }
+    return out;
   },
 });
 

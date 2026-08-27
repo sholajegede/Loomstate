@@ -43,6 +43,16 @@ agent's own inbox, so the alert reaches you even with the browser closed.
 Chrome asks for notification permission the first time. The extension shows each
 approval once.
 
+Answer it from the notification. **Approve** or **Reject** without opening
+Loomstate. Open the extension popup to read the full action, add a note, and
+answer there instead.
+
+An action that commits money or cannot be undone always needs your passkey. The
+extension cannot release one of those on its own, so **Approve with passkey**
+opens Loomstate at that action, where you confirm. This is deliberate: the
+pairing token in this extension is a weaker credential than your passkey, and it
+never gets to spend money.
+
 ## Stop it
 
 Select **Pause capture** in the popup to stop reporting. Select **Stop** next to
