@@ -274,8 +274,21 @@ http.route({
   }),
 });
 
-// The app shell answers every page route. Assets answer only their own path.
-for (const path of ["/", "/signal", "/approvals", "/audit", "/settings"]) {
+/**
+ * Every page route the web app has. The app shell answers each one, so a deep
+ * link and a reload both work. A new route in the client must be added here
+ * too, or it answers 404.
+ */
+const PAGE_PATHS = [
+  "/",
+  "/ask",
+  "/signal",
+  "/approvals",
+  "/audit",
+  "/settings",
+];
+
+for (const path of PAGE_PATHS) {
   http.route({ path, method: "GET", handler: servePath(true) });
 }
 http.route({ pathPrefix: "/loops/", method: "GET", handler: servePath(true) });
