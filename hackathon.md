@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5-mini by default, with gpt-4.1-mini and gpt-4o-mini as fallbacks. The chat model is chosen by the owner from what their own key reaches.
 - **Started:** 2026-08-26T21:21:20Z
-- **Last updated:** 2026-08-27T20:30:00Z
+- **Last updated:** 2026-08-27T21:20:00Z
 
 ## Log
 
@@ -423,3 +423,37 @@ where the decision was made, so an action annotated from the extension and then
 approved in the web app after a passkey check was filed as decided by the
 extension. A note is not a decision. The origin is now written when the action
 is actually released.
+
+### 2026-08-27 - the browser panel
+The extension became somewhere a person can live, rather than a pairing screen
+with a count on it.
+
+It now shows what is waiting and lets them answer it, their loops with status
+and how live each one is, what the agent has just done, and whether Loomstate is
+paused. Selecting a loop opens it in the web app. **Keep this open while I
+browse** moves the same panel to the side of the window, where it stays while
+they work.
+
+Quick-add files the page they are on: into a loop they pick, or into a new one
+they name. Loomstate stores the page and starts watching it, unless the page is
+on their excluded list, in which case it stores nothing and says so. Filing by
+hand goes through the same block list as captured browsing, because a rule that
+only holds when nobody presses a button is not a rule.
+
+One bounded read fills the whole panel: the paused flag, the counts, a page of
+loops, the recent activity, and the approvals waiting. Every read enters through
+an index and is capped, and the loop list is paginated with a cursor, so a large
+workspace does not make the panel slow. The full history stays in the web app
+(`convex/deviceView.ts`, `convex/http.ts`, `extension/popup.js`).
+
+Confirmed against the live deployment with a real pairing: the overview returned
+the paused state, the counts, two loops with a cursor, and six activity entries
+in one call; the cursor fetched the next page and reported the end; filing a
+page started a loop and watched it; filing a second page attached it to that
+loop and watched that too; and a manual add of a banking domain was refused with
+the reason.
+
+Removing a loop also improved. Captured browsing is still detached rather than
+deleted, because the pages a person read are theirs. A page filed by hand is
+deleted with its loop: it exists only as part of that loop, and leaving it
+behind seeded a loop nobody had asked for.
