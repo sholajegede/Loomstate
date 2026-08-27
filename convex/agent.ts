@@ -36,6 +36,8 @@ export const loopBrief = internalQuery({
     tier: v.string(),
     sourceUrls: v.array(v.string()),
     ownerEmail: v.optional(v.string()),
+    contactEmail: v.optional(v.string()),
+    contactSource: v.optional(v.string()),
     diffs: v.array(
       v.object({
         _id: v.id("diffs"),
@@ -104,6 +106,8 @@ export const loopBrief = internalQuery({
       tier: loop.tier,
       sourceUrls: loop.sourceUrls,
       ownerEmail: owner?.email,
+      contactEmail: loop.contactEmail,
+      contactSource: loop.contactSource,
       diffs,
       thread: messages
         .reverse()
@@ -407,6 +411,40 @@ export const setNextStep = internalMutation({
   },
 });
 
+/** Records why the agent cannot move, or clears it when it can. */
+export const setBlocker = internalMutation({
+  args: { loopId: v.id("loops"), reason: v.optional(v.string()) },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const loop = await ctx.db.get(args.loopId);
+    if (loop === null) return null;
+    if (loop.blockedReason === args.reason) return null;
+
+    await ctx.db.patch(args.loopId, { blockedReason: args.reason });
+    if (args.reason !== undefined) {
+      await ctx.db.insert("auditLog", {
+        workspaceId: loop.workspaceId,
+        loopId: args.loopId,
+        actorType: "agent",
+        action: "loop.blocked",
+        detail: args.reason,
+        at: Date.now(),
+      });
+    }
+    return null;
+  },
+});
+
+/** Marks that the agent looked at this loop, so the sweep paces itself. */
+export const markWorked = internalMutation({
+  args: { loopId: v.id("loops") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.loopId, { lastWorkedAt: Date.now() });
+    return null;
+  },
+});
+
 /**
  * Runs the agent on one loop: read the evidence, decide, then either act
  * inside the grant or put the action in the approval queue.
@@ -444,6 +482,13 @@ export const workLoop = internalAction({
       workspaceId: brief.workspaceId,
       loopId: args.loopId,
       loopTitle: brief.title,
+    });
+
+    // The owner's standing authority becomes this loop's grant. Nobody fills
+    // in a form per loop.
+    await ctx.runMutation(internal.grants.ensureAuto, {
+      loopId: args.loopId,
+      agentId: agent.agentId,
     });
 
     const runId: Id<"agentRuns"> = await ctx.runMutation(
@@ -516,10 +561,22 @@ export const workLoop = internalAction({
         return { outcome: decision.action, detail: decision.reason };
       }
 
-      const recipient = decision.recipient ?? args.recipientHint ?? null;
+      // Where to write comes from the page Firecrawl already read. The manual
+      // hint is an escape hatch, never the normal path.
+      const recipient =
+        brief.contactEmail ??
+        args.recipientHint ??
+        (decision.recipient !== null && decision.recipient.includes("@")
+          ? decision.recipient
+          : null);
+
       if (recipient === null || !recipient.includes("@")) {
         const detail =
-          "The agent has no address to write to. Add the seller's email to the loop.";
+          "No contact found on the watched pages. Loomstate keeps watching for one.";
+        await ctx.runMutation(internal.agent.setBlocker, {
+          loopId: args.loopId,
+          reason: detail,
+        });
         await ctx.runMutation(internal.agent.finishRun, {
           runId,
           status: "blocked",
@@ -527,6 +584,11 @@ export const workLoop = internalAction({
         });
         return { outcome: "blocked", detail };
       }
+
+      await ctx.runMutation(internal.agent.setBlocker, {
+        loopId: args.loopId,
+        reason: undefined,
+      });
 
       // The risk gate. Money and one-way actions never bypass the queue, at
       // any tier. This check is code, not a prompt the model can talk past.
@@ -696,10 +758,14 @@ function buildPrompt(
       subject: string;
       body: string;
     }[];
+    contactEmail?: string;
+    contactSource?: string;
   },
   recipientHint: string | undefined,
   instruction: string | undefined,
 ): string {
+  const contact = brief.contactEmail ?? recipientHint;
+  const contactSource = brief.contactSource;
   return [
     `Goal: ${brief.title}`,
     `What it is about: ${brief.summary}`,
@@ -726,9 +792,9 @@ function buildPrompt(
           .map((m) => `- ${m.direction} from ${m.from}: ${m.subject}\n  ${m.body}`)
           .join("\n"),
     "",
-    recipientHint === undefined
-      ? "No recipient address was given. Use one the evidence supports, or return null."
-      : `Write to this address: ${recipientHint}`,
+    contact === undefined
+      ? "No contact address was found on the watched pages. Return null for recipient."
+      : `Write to this address, read off ${contactSource ?? "the watched page"}: ${contact}`,
     instruction === undefined || instruction.trim() === ""
       ? ""
       : `\nWhat the person asked you to do: ${instruction.trim()}\nFollow this, and classify the risk of what it asks honestly.`,

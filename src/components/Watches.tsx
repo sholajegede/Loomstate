@@ -53,7 +53,8 @@ export function LiveWatches({
           <div>
             <h2 className="text-sm font-medium">Live watches</h2>
             <p className="mt-1 text-sm text-ink-400">
-              Loomstate re-reads these pages and reports what changed.
+              Loomstate picked these pages from the loop and re-reads them on a
+              schedule. It reports what changed.
             </p>
           </div>
           <button
@@ -134,13 +135,16 @@ export function LiveWatches({
           </ul>
         ) : (
           <p className="mt-3 rounded-lg border border-dashed border-ink-700 px-3 py-4 text-center text-xs text-ink-400">
-            No watch yet. Add a page below.
+            Loomstate found no page here worth re-reading. A search page changes
+            for reasons this loop does not care about.
           </p>
         )}
 
         {candidates.length > 0 ? (
           <div className="mt-3">
-            <p className="text-[11px] text-ink-400">Pages from this loop</p>
+            <p className="text-[11px] text-ink-400">
+              Other pages from this loop
+            </p>
             <div className="mt-1.5 space-y-1">
               {candidates.slice(0, 5).map((url) => (
                 <button

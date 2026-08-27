@@ -1,5 +1,5 @@
 import { v } from "convex/values";
-import { internalQuery, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { autonomyTier } from "./schema";
 import { requireDocIn, requireSession, requireWorkspaceWrite } from "./lib/access";
 
@@ -90,6 +90,56 @@ export const activeForLoop = internalQuery({
       spendCapCents: live.spendCapCents,
       expiresAt: live.expiresAt,
     };
+  },
+});
+
+/**
+ * Materialises the grant a loop already inherited. The owner chooses authority
+ * once, in settings; Loomstate writes the record so the agent can act without
+ * anyone filling in a form per loop.
+ */
+export const ensureAuto = internalMutation({
+  args: { loopId: v.id("loops"), agentId: v.id("agents") },
+  returns: v.union(v.null(), v.id("grants")),
+  handler: async (ctx, args) => {
+    const loop = await ctx.db.get(args.loopId);
+    if (loop === null) return null;
+
+    const grants = await ctx.db
+      .query("grants")
+      .withIndex("by_loop", (q) => q.eq("loopId", args.loopId))
+      .collect();
+    if (grants.some(isActive)) return null;
+
+    const workspace = await ctx.db.get(loop.workspaceId);
+    if (workspace === null) return null;
+
+    const now = Date.now();
+    const grantId = await ctx.db.insert("grants", {
+      workspaceId: loop.workspaceId,
+      loopId: args.loopId,
+      agentId: args.agentId,
+      tier: loop.tier,
+      // Never email.commit. Money always routes to the approval queue.
+      allowedActions:
+        loop.tier === "watch" ? [] : ["email.ask", "email.negotiate"],
+      spendCapCents: 0,
+      grantedBy: workspace.ownerId,
+      grantedAt: now,
+      expiresAt: now + DEFAULT_HOURS * 3_600_000,
+    });
+
+    await ctx.db.insert("auditLog", {
+      workspaceId: loop.workspaceId,
+      loopId: args.loopId,
+      agentId: args.agentId,
+      grantId,
+      actorType: "system",
+      action: "grant.auto",
+      detail: `Loomstate applied the owner's standing ${loop.tier} authority to this loop.`,
+      at: now,
+    });
+    return grantId;
   },
 });
 

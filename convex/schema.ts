@@ -63,6 +63,9 @@ export default defineSchema({
     name: v.string(),
     ownerId: v.id("users"),
     createdAt: v.number(),
+    // The authority every new loop inherits. Set once, not per action.
+    defaultTier: v.optional(autonomyTier),
+    autopilot: v.optional(v.boolean()),
   }).index("by_owner", ["ownerId"]),
 
   /** Read-only watchers invited to a workspace. */
@@ -132,10 +135,18 @@ export default defineSchema({
     lastActivityAt: v.number(),
     createdAt: v.number(),
     closedAt: v.optional(v.number()),
+    // Where the agent writes, read off the watched page rather than typed in.
+    contactEmail: v.optional(v.string()),
+    contactSource: v.optional(v.string()),
+    // Why the agent cannot move, in the owner's words. Null when it can.
+    blockedReason: v.optional(v.string()),
+    lastWorkedAt: v.optional(v.number()),
+    watchesSeeded: v.optional(v.boolean()),
   })
     .index("by_workspace", ["workspaceId"])
     .index("by_workspace_status", ["workspaceId", "status"])
-    .index("by_workspace_activity", ["workspaceId", "lastActivityAt"]),
+    .index("by_workspace_activity", ["workspaceId", "lastActivityAt"])
+    .index("by_status_worked", ["status", "lastWorkedAt"]),
 
   /** A Firecrawl target that keeps one loop alive against the live web. */
   watches: defineTable({
@@ -164,6 +175,7 @@ export default defineSchema({
     title: v.optional(v.string()),
     price: v.optional(v.string()),
     availability: v.optional(v.string()),
+    contactEmail: v.optional(v.string()),
     excerpt: v.string(),
     markdown: v.optional(v.string()),
     ok: v.boolean(),

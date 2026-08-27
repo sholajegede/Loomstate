@@ -12,6 +12,7 @@ import type { ActionCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireDocIn, requireSession, requireWorkspaceWrite } from "./lib/access";
 import { normalize, scrape } from "./lib/firecrawl";
+import { findContactEmail } from "./lib/url";
 import { askForJson } from "./lib/openai";
 import { sha256Hex } from "./lib/hash";
 import { resolveFirecrawlKey, resolveOpenAiKey } from "./secrets";
@@ -301,6 +302,7 @@ export const recordSnapshot = internalMutation({
     title: v.optional(v.string()),
     price: v.optional(v.string()),
     availability: v.optional(v.string()),
+    contactEmail: v.optional(v.string()),
     excerpt: v.string(),
     error: v.optional(v.string()),
     changes: v.array(
@@ -328,9 +330,22 @@ export const recordSnapshot = internalMutation({
       title: args.title,
       price: args.price,
       availability: args.availability,
+      contactEmail: args.contactEmail,
       excerpt: args.excerpt,
       ok: args.ok,
     });
+
+    // A contact read off the page clears the blocker that stopped the agent.
+    if (args.contactEmail !== undefined) {
+      const loop = await ctx.db.get(watch.loopId);
+      if (loop !== null && loop.contactEmail !== args.contactEmail) {
+        await ctx.db.patch(watch.loopId, {
+          contactEmail: args.contactEmail,
+          contactSource: watch.url,
+          blockedReason: undefined,
+        });
+      }
+    }
 
     await ctx.db.patch(args.watchId, {
       lastCrawlAt: now,
@@ -411,14 +426,15 @@ const EXTRACT_SYSTEM = `You read one web page and report the facts a buyer or pl
 
 Report only what the page states. Never guess a price. If the page does not state a field, return null for it.
 availability is one of: available, sold, unavailable, unknown.
-excerpt is one short sentence that says what this page offers right now.`;
+excerpt is one short sentence that says what this page offers right now.
+contactEmail is the address a buyer would write to about this listing. Use only an address printed on the page. Return null for a site-wide address such as support@ or no-reply@, and null when the page prints none.`;
 
 const EXTRACT_SCHEMA = {
   name: "page_facts",
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["title", "price", "availability", "excerpt"],
+    required: ["title", "price", "availability", "contactEmail", "excerpt"],
     properties: {
       title: { type: ["string", "null"] },
       price: { type: ["string", "null"] },
@@ -426,6 +442,7 @@ const EXTRACT_SCHEMA = {
         type: "string",
         enum: ["available", "sold", "unavailable", "unknown"],
       },
+      contactEmail: { type: ["string", "null"] },
       excerpt: { type: "string" },
     },
   },
@@ -435,6 +452,7 @@ type PageFacts = {
   title: string | null;
   price: string | null;
   availability: string;
+  contactEmail: string | null;
   excerpt: string;
 };
 
@@ -495,10 +513,15 @@ export const sweepOne = internalAction({
     const normalized = normalize(page.markdown);
     const contentHash = await sha256Hex(normalized);
 
+    // The page itself is the source of truth for where to write. Loomstate
+    // reads it here so the person never has to look a seller up by hand.
+    const scanned = findContactEmail(page.markdown);
+
     let facts: PageFacts = {
       title: page.title === "" ? null : page.title,
       price: null,
       availability: "unknown",
+      contactEmail: scanned,
       excerpt: normalized.slice(0, 180),
     };
     try {
@@ -509,7 +532,7 @@ export const sweepOne = internalAction({
         schema: EXTRACT_SCHEMA,
         reasoningEffort: "low",
       });
-      facts = extracted.value;
+      facts = { ...extracted.value, contactEmail: extracted.value.contactEmail ?? scanned };
     } catch {
       // Without a key Loomstate still detects change by content hash.
     }
@@ -572,6 +595,7 @@ export const sweepOne = internalAction({
       title: facts.title ?? undefined,
       price: facts.price ?? undefined,
       availability: facts.availability,
+      contactEmail: facts.contactEmail ?? undefined,
       excerpt: facts.excerpt.slice(0, 400),
       changes,
     });

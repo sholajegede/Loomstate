@@ -1,162 +1,98 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { Card } from "./Page";
-import { TIERS } from "./LoopBits";
 import { timeAgo, timeUntil } from "../lib/format";
 import { readableError } from "../lib/errors";
 
-export function AgentPanel({ loopId }: { loopId: Id<"loops"> }) {
-  const agent = useQuery(api.agents.forLoop, { loopId });
-  const grants = useQuery(api.grants.forLoop, { loopId });
-  const thread = useQuery(api.email.threadForLoop, { loopId });
-  const grant = useMutation(api.grants.grant);
-  const revoke = useMutation(api.grants.revoke);
-  const workLoop = useAction(api.agent.workLoopNow);
-  const provision = useAction(api.agents.provision);
+type Loop = {
+  _id: Id<"loops">;
+  tier: string;
+  contactEmail?: string;
+  contactSource?: string;
+  blockedReason?: string;
+  lastWorkedAt?: number;
+};
 
-  const [recipient, setRecipient] = useState("");
-  const [instruction, setInstruction] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [note, setNote] = useState<string | null>(null);
+/**
+ * A readout, not a form. Loomstate works the loop on its own; this says what it
+ * is doing and why. The controls under "Manual controls" cover the cases the
+ * agent cannot resolve by itself.
+ */
+export function AgentPanel({ loop }: { loop: Loop }) {
+  const agent = useQuery(api.agents.forLoop, { loopId: loop._id });
+  const grants = useQuery(api.grants.forLoop, { loopId: loop._id });
+  const thread = useQuery(api.email.threadForLoop, { loopId: loop._id });
 
   const live = (grants ?? []).find((g) => g.active) ?? null;
-
-  /** Gives the loop an agent if it has none, then records the grant. */
-  async function setAuthority(tier: "watch" | "draft" | "act") {
-    setBusy(true);
-    setNote(null);
-    try {
-      const agentId =
-        agent === undefined || agent === null
-          ? (await provision({ loopId })).agentId
-          : agent._id;
-      await grant({ loopId, agentId, tier });
-      setNote(`The agent now holds ${tier} authority on this loop.`);
-    } catch (error) {
-      setNote(readableError(error, "Loomstate could not set the authority."));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function run() {
-    setBusy(true);
-    setNote(null);
-    try {
-      const result = await workLoop({
-        loopId,
-        recipient: recipient.trim() === "" ? undefined : recipient.trim(),
-        instruction: instruction.trim() === "" ? undefined : instruction.trim(),
-      });
-      setNote(result.detail);
-    } catch (error) {
-      setNote(readableError(error, "The agent run failed."));
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <>
       <Card>
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="text-sm font-medium">Agent</h2>
-            <p className="mt-1 text-sm text-ink-400">
-              {agent === undefined || agent === null
-                ? "This loop has no agent yet. Loomstate creates one the first time it works the loop."
-                : "The agent sends and receives email from its own address."}
-            </p>
-          </div>
-        </div>
+        <h2 className="text-sm font-medium">Agent</h2>
 
-        {agent ? (
-          <p className="mt-3 truncate rounded-lg border border-ink-800 bg-ink-950/60 px-3 py-2 font-mono text-xs text-thread">
-            {agent.inboxAddress}
-          </p>
-        ) : null}
+        <Status loop={loop} hasAgent={agent !== undefined && agent !== null} />
 
-        <div className="mt-3">
-          <p className="text-[11px] text-ink-400">Authority</p>
-          <div className="mt-1.5 space-y-1.5">
-            {TIERS.map((tier) => (
-              <button
-                key={tier.id}
-                onClick={() => void setAuthority(tier.id)}
-                disabled={busy}
-                className={`w-full rounded-lg border px-3 py-2 text-left transition-colors disabled:opacity-50 ${
-                  live?.tier === tier.id
-                    ? "border-thread/50 bg-thread/5"
-                    : "border-ink-800 hover:border-ink-600"
-                }`}
-              >
-                <p className="text-sm text-ink-100">{tier.label}</p>
-                <p className="text-[11px] text-ink-400">{tier.help}</p>
-              </button>
-            ))}
-          </div>
-        </div>
+        <dl className="mt-4 space-y-2.5">
+          <Row label="Writes from">
+            {agent ? (
+              <span className="font-mono text-thread">{agent.inboxAddress}</span>
+            ) : (
+              <span className="text-ink-400">
+                Loomstate creates an address on the first run.
+              </span>
+            )}
+          </Row>
 
-        {live !== null ? (
-          <div className="mt-3 rounded-lg border border-ink-800 px-3 py-2">
-            <p className="text-[11px] text-ink-400">
-              Grant expires {timeUntil(live.expiresAt)}
-            </p>
-            <p className="mt-1 font-mono text-[11px] text-ink-300">
-              {live.allowedActions.join(", ") || "no outbound action"}
-            </p>
-            <button
-              onClick={() => void revoke({ grantId: live._id })}
-              className="mt-2 w-full rounded border border-ink-700 px-2 py-1 text-[11px] text-ink-300 hover:border-alarm/50 hover:text-alarm"
-            >
-              Revoke now
-            </button>
-          </div>
-        ) : (
-          <p className="mt-3 text-xs text-ink-400">
-            No live grant. Every action the agent proposes goes to the approval
-            queue.
-          </p>
-        )}
+          <Row label="Writes to">
+            {loop.contactEmail ? (
+              <>
+                <span className="font-mono text-ink-100">{loop.contactEmail}</span>
+                {loop.contactSource ? (
+                  <span className="mt-0.5 block text-[11px] text-ink-400">
+                    read off{" "}
+                    <a
+                      href={loop.contactSource}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="hover:text-thread"
+                    >
+                      the watched page
+                    </a>
+                  </span>
+                ) : null}
+              </>
+            ) : (
+              <span className="text-ink-400">
+                Not found on the watched pages yet.
+              </span>
+            )}
+          </Row>
 
-        <div className="mt-3">
-          <p className="text-[11px] text-ink-400">Who should the agent write to</p>
-          <input
-            value={recipient}
-            onChange={(e) => setRecipient(e.target.value)}
-            placeholder="seller@example.com"
-            className="mt-1 w-full rounded-lg border border-ink-700 bg-ink-900 px-3 py-2 text-sm outline-none focus:border-thread/60"
-          />
-        </div>
+          <Row label="Authority">
+            <span className="text-ink-100">{live?.tier ?? loop.tier}</span>
+            <span className="mt-0.5 block text-[11px] text-ink-400">
+              {live === null
+                ? "Applied on the first run. "
+                : `Renews ${timeUntil(live.expiresAt)}. `}
+              <Link to="/settings" className="hover:text-thread">
+                Change for every loop
+              </Link>
+            </span>
+          </Row>
 
-        <div className="mt-3">
-          <p className="text-[11px] text-ink-400">
-            What should the agent do (optional)
-          </p>
-          <textarea
-            value={instruction}
-            onChange={(e) => setInstruction(e.target.value)}
-            rows={2}
-            placeholder="Ask if the phone is still available"
-            className="mt-1 w-full resize-none rounded-lg border border-ink-700 bg-ink-900 px-3 py-2 text-sm outline-none focus:border-thread/60"
-          />
-        </div>
+          <Row label="Last run">
+            <span className="text-ink-100">
+              {loop.lastWorkedAt === undefined
+                ? "Not yet"
+                : timeAgo(loop.lastWorkedAt)}
+            </span>
+          </Row>
+        </dl>
 
-        <button
-          onClick={() => void run()}
-          disabled={busy}
-          className="mt-3 w-full rounded-lg bg-thread px-3 py-2 text-sm font-medium text-ink-950 hover:opacity-90 disabled:opacity-50"
-        >
-          {busy ? "The agent is working" : "Work this loop now"}
-        </button>
-
-        {note !== null ? (
-          <p className="mt-2 rounded-lg border border-ink-800 bg-ink-950/60 px-3 py-2 text-xs text-ink-300">
-            {note}
-          </p>
-        ) : null}
+        <Manual loop={loop} live={live} />
       </Card>
 
       {(thread ?? []).length > 0 ? (
@@ -192,5 +128,134 @@ export function AgentPanel({ loopId }: { loopId: Id<"loops"> }) {
         </Card>
       ) : null}
     </>
+  );
+}
+
+function Status({ loop, hasAgent }: { loop: Loop; hasAgent: boolean }) {
+  if (loop.blockedReason !== undefined) {
+    return (
+      <p className="mt-2 rounded-lg border border-warp/40 bg-warp/5 px-3 py-2 text-sm text-ink-100">
+        {loop.blockedReason}
+      </p>
+    );
+  }
+  if (loop.tier === "watch") {
+    return (
+      <p className="mt-2 text-sm text-ink-400">
+        The agent watches this loop and tells you. It sends nothing.
+      </p>
+    );
+  }
+  return (
+    <p className="mt-2 text-sm text-ink-400">
+      {hasAgent
+        ? "Loomstate works this loop on its own. It asks you only before an action that commits money or cannot be undone."
+        : "Loomstate works this loop on its own within a few minutes of a change."}
+    </p>
+  );
+}
+
+function Row({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex gap-3 text-sm">
+      <dt className="w-24 shrink-0 text-[11px] leading-5 text-ink-400">{label}</dt>
+      <dd className="min-w-0 flex-1 break-words">{children}</dd>
+    </div>
+  );
+}
+
+/** The escape hatches. Closed by default, because the normal path needs none. */
+function Manual({
+  loop,
+  live,
+}: {
+  loop: Loop;
+  live: { _id: Id<"grants">; tier: string } | null;
+}) {
+  const workLoop = useAction(api.agent.workLoopNow);
+  const revoke = useMutation(api.grants.revoke);
+  const setContact = useMutation(api.loops.setContact);
+  const [open, setOpen] = useState(false);
+  const [contact, setContactDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  async function run() {
+    setBusy(true);
+    setNote(null);
+    try {
+      const result = await workLoop({ loopId: loop._id });
+      setNote(result.detail);
+    } catch (error) {
+      setNote(readableError(error, "The agent run failed."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mt-4 border-t border-ink-800 pt-3">
+      <button
+        onClick={() => setOpen((was) => !was)}
+        className="text-[11px] text-ink-400 hover:text-ink-100"
+      >
+        {open ? "Hide manual controls" : "Manual controls"}
+      </button>
+
+      {open ? (
+        <div className="mt-3 space-y-3">
+          <button
+            onClick={() => void run()}
+            disabled={busy}
+            className="w-full rounded-lg border border-ink-700 px-3 py-2 text-sm hover:bg-ink-800 disabled:opacity-50"
+          >
+            {busy ? "The agent is working" : "Run the agent now"}
+          </button>
+
+          {loop.contactEmail === undefined ? (
+            <div>
+              <p className="text-[11px] text-ink-400">
+                Set the contact by hand if the page never prints one
+              </p>
+              <div className="mt-1 flex gap-2">
+                <input
+                  value={contact}
+                  onChange={(e) => setContactDraft(e.target.value)}
+                  placeholder="seller@example.com"
+                  className="min-w-0 flex-1 rounded-lg border border-ink-700 bg-ink-900 px-3 py-1.5 text-sm outline-none focus:border-thread/60"
+                />
+                <button
+                  onClick={() => {
+                    void setContact({
+                      loopId: loop._id,
+                      contactEmail: contact.trim(),
+                    }).then(() => setContactDraft(""));
+                  }}
+                  disabled={contact.trim() === ""}
+                  className="rounded-lg border border-ink-700 px-3 py-1.5 text-sm hover:bg-ink-800 disabled:opacity-40"
+                >
+                  Set
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {live !== null ? (
+            <button
+              onClick={() => void revoke({ grantId: live._id })}
+              className="w-full rounded-lg border border-ink-700 px-3 py-2 text-sm text-ink-300 hover:border-alarm/50 hover:text-alarm"
+            >
+              Revoke this loop's authority
+            </button>
+          ) : null}
+
+          {note !== null ? (
+            <p className="rounded-lg border border-ink-800 bg-ink-950/60 px-3 py-2 text-xs text-ink-300">
+              {note}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   );
 }

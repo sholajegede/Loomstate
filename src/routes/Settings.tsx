@@ -11,15 +11,89 @@ export default function Settings() {
   return (
     <Page
       title="Settings"
-      lede="Pair a browser, choose the domains Loomstate must never read, and set your own API key."
+      lede="Set how much the agent may do, pair a browser, choose the domains Loomstate must never read, and set your own API key."
     >
       <div className="grid gap-4">
+        <Autonomy />
         <Pairing />
         <InboundEmail />
         <Exclusions />
         <Keys />
       </div>
     </Page>
+  );
+}
+
+const TIER_CHOICES = [
+  {
+    id: "watch" as const,
+    label: "Watch",
+    help: "Loomstate monitors your loops and tells you. It sends nothing.",
+  },
+  {
+    id: "draft" as const,
+    label: "Draft",
+    help: "Loomstate prepares each email. You approve every one before it goes.",
+  },
+  {
+    id: "act" as const,
+    label: "Act",
+    help: "Loomstate sends its own questions. Money and one-way actions still wait for you.",
+  },
+];
+
+function Autonomy() {
+  const session = useQuery(api.workspaces.current);
+  const setDefaults = useMutation(api.workspaces.setDefaults);
+  const workspace = session?.workspace ?? null;
+
+  return (
+    <Card>
+      <h2 className="text-sm font-medium">Agent autonomy</h2>
+      <p className="mt-1 text-sm text-ink-400">
+        You set this once. Every loop inherits it, so Loomstate never asks you to
+        choose again. An action that commits money or cannot be undone always
+        waits for your approval, whatever you pick here.
+      </p>
+
+      <div className="mt-4 space-y-1.5">
+        {TIER_CHOICES.map((tier) => (
+          <button
+            key={tier.id}
+            onClick={() => void setDefaults({ defaultTier: tier.id })}
+            className={`w-full rounded-lg border px-3 py-2 text-left transition-colors ${
+              workspace?.defaultTier === tier.id
+                ? "border-thread/50 bg-thread/5"
+                : "border-ink-800 hover:border-ink-600"
+            }`}
+          >
+            <p className="text-sm text-ink-100">{tier.label}</p>
+            <p className="text-[11px] text-ink-400">{tier.help}</p>
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-4 flex items-center gap-3 rounded-lg border border-ink-800 px-3 py-2.5">
+        <span
+          className={`h-1.5 w-1.5 rounded-full ${
+            workspace?.autopilot ? "bg-thread" : "bg-warp"
+          }`}
+        />
+        <span className="flex-1 text-sm text-ink-300">
+          {workspace?.autopilot
+            ? "Loomstate builds loops and works them on a schedule."
+            : "Loomstate is paused. It captures browsing but does no work."}
+        </span>
+        <button
+          onClick={() =>
+            void setDefaults({ autopilot: !(workspace?.autopilot ?? true) })
+          }
+          className="rounded-lg border border-ink-700 px-3 py-1.5 text-xs hover:bg-ink-800"
+        >
+          {workspace?.autopilot ? "Pause" : "Resume"}
+        </button>
+      </div>
+    </Card>
   );
 }
 

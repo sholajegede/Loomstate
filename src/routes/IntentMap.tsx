@@ -32,19 +32,25 @@ export default function IntentMap() {
   return (
     <Page
       title="Intent map"
-      lede="Every goal you started on the web and never closed. Loomstate builds each loop from your own browsing signal."
+      lede="Every goal you started on the web and never closed. Loomstate builds each loop from your browsing, watches the pages behind it, and works it without being asked."
       actions={
-        <button
-          onClick={() => void rebuild()}
-          disabled={busy}
-          className="shrink-0 rounded-lg bg-thread px-3.5 py-2 text-sm font-medium text-ink-950 hover:opacity-90 disabled:opacity-50"
-        >
-          {busy
-            ? "Reading your signal"
-            : pending > 0
-              ? `Rebuild loops (${pending} new)`
-              : "Rebuild loops"}
-        </button>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <span className="flex items-center gap-1.5 text-[11px] text-ink-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-thread" />
+            Loomstate is building loops on its own
+          </span>
+          <button
+            onClick={() => void rebuild()}
+            disabled={busy}
+            className="rounded-lg border border-ink-700 px-3 py-1.5 text-xs text-ink-300 hover:bg-ink-800 hover:text-ink-100 disabled:opacity-50"
+          >
+            {busy
+              ? "Re-scanning"
+              : pending > 0
+                ? `Re-scan now (${pending} new pages)`
+                : "Re-scan now"}
+          </button>
+        </div>
       }
     >
       {note !== null ? (
@@ -58,7 +64,7 @@ export default function IntentMap() {
       ) : loops.length === 0 ? (
         <EmptyState
           title="No loops yet"
-          body="Loomstate needs browsing signal first. Pair a browser, browse as you normally do, then select Rebuild loops."
+          body="Loomstate needs browsing signal first. Pair a browser and browse as you normally do. Loops appear here on their own within a few minutes."
           hint="Open Settings to pair a browser."
         />
       ) : (
@@ -82,6 +88,12 @@ export default function IntentMap() {
                 <p className="text-[11px] text-ink-400">Next step</p>
                 <p className="mt-0.5 text-sm text-ink-200">{loop.nextStep}</p>
               </div>
+
+              {loop.blockedReason !== undefined ? (
+                <p className="mt-2 truncate rounded-lg border border-warp/40 bg-warp/5 px-2.5 py-1.5 text-[11px] text-ink-200">
+                  {loop.blockedReason}
+                </p>
+              ) : null}
 
               <div className="mt-3.5 flex flex-wrap items-center gap-2">
                 <TypeTag type={loop.type} />

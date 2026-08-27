@@ -13,6 +13,7 @@ import type * as agents from "../agents.js";
 import type * as approvals from "../approvals.js";
 import type * as auditLog from "../auditLog.js";
 import type * as auth from "../auth.js";
+import type * as autopilot from "../autopilot.js";
 import type * as blocklist from "../blocklist.js";
 import type * as crons from "../crons.js";
 import type * as devices from "../devices.js";
@@ -48,6 +49,7 @@ declare const fullApi: ApiFromModules<{
   approvals: typeof approvals;
   auditLog: typeof auditLog;
   auth: typeof auth;
+  autopilot: typeof autopilot;
   blocklist: typeof blocklist;
   crons: typeof crons;
   devices: typeof devices;

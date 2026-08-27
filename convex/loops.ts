@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import {
   action,
+  internalAction,
   internalMutation,
   internalQuery,
   mutation,
@@ -10,10 +11,12 @@ import {
 import { internal } from "./_generated/api";
 import type { ActionCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import type { MutationCtx } from "./_generated/server";
 import { autonomyTier, loopStatus, loopType } from "./schema";
 import { requireDocIn, requireSession, requireWorkspaceWrite } from "./lib/access";
 import { askForJson } from "./lib/openai";
 import { alivenessScore, statusFor } from "./lib/aliveness";
+import { isWatchable } from "./lib/url";
 import { resolveOpenAiKey } from "./secrets";
 
 const MAX_EVENTS_PER_RUN = 60;
@@ -32,6 +35,10 @@ const loopShape = v.object({
   eventCount: v.number(),
   lastActivityAt: v.number(),
   createdAt: v.number(),
+  contactEmail: v.optional(v.string()),
+  contactSource: v.optional(v.string()),
+  blockedReason: v.optional(v.string()),
+  lastWorkedAt: v.optional(v.number()),
 });
 
 /** Every loop in the workspace, liveliest first. The intent map reads this. */
@@ -109,6 +116,38 @@ export const setTier = mutation({
       actorType: "user",
       action: "loop.setTier",
       detail: `The owner set this loop to the ${args.tier} tier.`,
+      at: Date.now(),
+    });
+    return null;
+  },
+});
+
+/**
+ * Sets the contact by hand. Loomstate reads the contact off the watched page
+ * on its own; this covers a page that never prints one.
+ */
+export const setContact = mutation({
+  args: { loopId: v.id("loops"), contactEmail: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const loop = await ctx.db.get(args.loopId);
+    if (loop === null) throw new Error("Loop not found.");
+    await requireWorkspaceWrite(ctx, loop.workspaceId);
+
+    const contact = args.contactEmail.trim().toLowerCase();
+    if (!contact.includes("@")) throw new Error("Enter an email address.");
+
+    await ctx.db.patch(args.loopId, {
+      contactEmail: contact,
+      contactSource: "set by the owner",
+      blockedReason: undefined,
+    });
+    await ctx.db.insert("auditLog", {
+      workspaceId: loop.workspaceId,
+      loopId: args.loopId,
+      actorType: "user",
+      action: "loop.setContact",
+      detail: `The owner set the contact for this loop to ${contact}.`,
       at: Date.now(),
     });
     return null;
@@ -229,6 +268,9 @@ export const applyClusters = internalMutation({
   returns: v.object({ created: v.number(), updated: v.number() }),
   handler: async (ctx, args) => {
     const now = Date.now();
+    const workspace = await ctx.db.get(args.workspaceId);
+    // Authority is a setting, not a question asked per loop.
+    const inheritedTier = workspace?.defaultTier ?? "act";
     let created = 0;
     let updated = 0;
 
@@ -295,7 +337,7 @@ export const applyClusters = internalMutation({
           nextStep: cluster.nextStep,
           sourceUrls,
           keywords: cluster.keywords.slice(0, 10),
-          tier: "watch",
+          tier: inheritedTier,
           eventCount: events.length,
           lastActivityAt,
           createdAt: now,
@@ -314,6 +356,11 @@ export const applyClusters = internalMutation({
       for (const event of events) {
         await ctx.db.patch(event._id, { loopId, clusteredAt: now });
       }
+
+      // A loop arrives ready to run. Loomstate watches the pages behind it and
+      // gives it the authority the owner already chose, so nobody has to set
+      // either one up by hand.
+      await seedWatches(ctx, args.workspaceId, loopId, sourceUrls, now);
     }
 
     // Signal the model could not place still counts as read, so the next run
@@ -405,26 +452,31 @@ const CLUSTER_SCHEMA = {
  * Reads the browsing signal that has no loop yet and rebuilds the goals behind
  * it. Safe to run repeatedly: each event is read once.
  */
-export const reconstruct = action({
-  args: { workspaceId: v.optional(v.id("workspaces")) },
-  returns: v.object({
-    created: v.number(),
-    updated: v.number(),
-    read: v.number(),
-    model: v.optional(v.string()),
-    detail: v.string(),
-  }),
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{
-    created: number;
-    updated: number;
-    read: number;
-    model?: string;
-    detail: string;
-  }> => {
-    const workspaceId = await resolveWorkspace(ctx, args.workspaceId);
+const reconstructResult = v.object({
+  created: v.number(),
+  updated: v.number(),
+  read: v.number(),
+  model: v.optional(v.string()),
+  detail: v.string(),
+});
+
+export type ReconstructResult = {
+  created: number;
+  updated: number;
+  read: number;
+  model?: string;
+  detail: string;
+};
+
+/**
+ * Rebuilds one workspace's loops. The scheduled sweep calls this, so loops
+ * appear without anyone asking for them.
+ */
+export const reconstructFor = internalAction({
+  args: { workspaceId: v.id("workspaces") },
+  returns: reconstructResult,
+  handler: async (ctx, args): Promise<ReconstructResult> => {
+    const workspaceId = args.workspaceId;
     const signal = await ctx.runQuery(internal.loops.pendingSignal, {
       workspaceId,
     });
@@ -503,6 +555,19 @@ export const reconstruct = action({
   },
 });
 
+/**
+ * Re-scans on request. Loomstate does this on its own every few minutes, so
+ * this is for an owner who does not want to wait for the next sweep.
+ */
+export const reconstruct = action({
+  args: { workspaceId: v.optional(v.id("workspaces")) },
+  returns: reconstructResult,
+  handler: async (ctx, args): Promise<ReconstructResult> => {
+    const workspaceId = await resolveWorkspace(ctx, args.workspaceId);
+    return await ctx.runAction(internal.loops.reconstructFor, { workspaceId });
+  },
+});
+
 async function resolveWorkspace(
   ctx: ActionCtx,
   given: Id<"workspaces"> | undefined,
@@ -528,5 +593,64 @@ function publicLoop(loop: Doc<"loops">) {
     eventCount: loop.eventCount,
     lastActivityAt: loop.lastActivityAt,
     createdAt: loop.createdAt,
+    contactEmail: loop.contactEmail,
+    contactSource: loop.contactSource,
+    blockedReason: loop.blockedReason,
+    lastWorkedAt: loop.lastWorkedAt,
   };
+}
+
+/**
+ * Puts every page worth re-reading under a watch. Search pages and feeds are
+ * skipped: they change for reasons the loop does not care about.
+ */
+async function seedWatches(
+  ctx: MutationCtx,
+  workspaceId: Id<"workspaces">,
+  loopId: Id<"loops">,
+  sourceUrls: string[],
+  now: number,
+): Promise<number> {
+  const existing = await ctx.db
+    .query("watches")
+    .withIndex("by_loop", (q) => q.eq("loopId", loopId))
+    .collect();
+  const already = new Set(existing.map((w) => w.url));
+
+  let added = 0;
+  for (const url of sourceUrls) {
+    if (already.has(url) || !isWatchable(url)) continue;
+    if (existing.length + added >= 5) break;
+
+    let host = url;
+    try {
+      host = new URL(url).hostname.replace(/^www\./, "");
+    } catch {
+      continue;
+    }
+
+    await ctx.db.insert("watches", {
+      workspaceId,
+      loopId,
+      url,
+      label: host,
+      intervalMinutes: 15,
+      active: true,
+      createdAt: now,
+    });
+    added += 1;
+  }
+
+  if (added > 0) {
+    await ctx.db.patch(loopId, { watchesSeeded: true });
+    await ctx.db.insert("auditLog", {
+      workspaceId,
+      loopId,
+      actorType: "system",
+      action: "watch.seed",
+      detail: `Loomstate started watching ${added} pages behind this loop.`,
+      at: now,
+    });
+  }
+  return added;
 }

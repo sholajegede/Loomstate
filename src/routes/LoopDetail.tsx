@@ -65,6 +65,11 @@ export default function LoopDetail() {
           <Card>
             <p className="text-[11px] text-ink-400">Next step</p>
             <p className="mt-1 text-sm text-ink-100">{loop.nextStep}</p>
+            {loop.blockedReason !== undefined ? (
+              <p className="mt-2 rounded-lg border border-warp/40 bg-warp/5 px-3 py-2 text-xs text-ink-200">
+                {loop.blockedReason}
+              </p>
+            ) : null}
           </Card>
 
           <LiveWatches loopId={loop._id} sourceUrls={loop.sourceUrls} />
@@ -95,7 +100,7 @@ export default function LoopDetail() {
         </div>
 
         <div className="min-w-0 space-y-4">
-          <AgentPanel loopId={loop._id} />
+          <AgentPanel loop={loop} />
 
           <Card>
             <h2 className="text-sm font-medium">Keywords</h2>
