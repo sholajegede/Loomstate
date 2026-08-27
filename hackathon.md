@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5-mini, with gpt-4.1-mini and gpt-4o-mini as fallbacks
 - **Started:** 2026-08-26T21:21:20Z
-- **Last updated:** 2026-08-27T04:30:00Z
+- **Last updated:** 2026-08-27T04:45:00Z
 
 ## Log
 
@@ -284,3 +284,25 @@ stopped that loop, and queued a notification linking to it; a stopped loop
 returns "paused" and does no work; a loop with nothing new returns "Nothing new
 on this loop since the agent last looked"; the scheduled sweep now finds nothing
 to do; and a reply moved an open question into the answered list and cleared it.
+
+### 2026-08-27 - 8fa390f
+The send limit now binds to approved email as well as autonomous email. A person
+pressing approve is deliberate, but a loop already far over its limit is still
+the wrong thing to send from, however the send started. The approval stays
+pending and says why, rather than being spent.
+
+A loop can also be removed now, with everything it holds: its email, approvals,
+grants, runs, watches, snapshots, changes, notifications, and its own audit
+entries. The browsing events survive and are detached, because the pages a
+person read are theirs and were never the problem. Removing a loop is available
+on the loop page (`convex/loops.ts`, `convex/approvals.ts`,
+`src/routes/LoopDetail.tsx`).
+
+Both deployments were then cleared of the incident. Production lost the MacBook
+loop, which carried 37 messages, 63 audit entries, and a synthetic test message
+holding a made-up bank account. Development lost the iPhone loop, which carried
+the same runaway negotiation across 43 messages and 70 audit entries. Nine and
+three browsing events respectively were detached rather than deleted. A scan of
+both databases for the test artifacts now returns nothing in messages, audit
+entries, approvals, or notifications, and neither deployment holds any email at
+all.
