@@ -111,15 +111,31 @@ async function pullNotifications() {
   try {
     const response = await fetch(`${endpoint}/x/notifications`, {
       method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { "Content-Type": "application/json" , Authorization: `Bearer ${token}` },
+      body: JSON.stringify({}),
     });
-    if (!response.ok) return;
+    if (!response.ok) {
+      await note({ lastPullError: `server said ${response.status}` });
+      return;
+    }
     payload = await response.json();
-  } catch {
+  } catch (error) {
+    await note({ lastPullError: String(error) });
     return;
   }
 
-  for (const item of payload.notifications ?? []) {
+  const waiting = payload.notifications ?? [];
+  await note({
+    lastPullAt: Date.now(),
+    lastPullCount: waiting.length,
+    lastPullError: "",
+    permission: await permissionLevel(),
+  });
+
+  // Only what the browser really showed is reported back, so an action is not
+  // marked told when the notification never appeared.
+  const raised = [];
+  for (const item of waiting) {
     const id = `${NOTIFY_PREFIX}${item.id}`;
 
     // An action still waiting can be answered from the notification itself.
@@ -132,7 +148,7 @@ async function pullNotifications() {
         ]
       : undefined;
 
-    chrome.notifications.create(id, {
+    const shown = await show(id, {
       type: "basic",
       iconUrl: chrome.runtime.getURL("icons/icon128.png"),
       title: item.title,
@@ -141,6 +157,8 @@ async function pullNotifications() {
       requireInteraction: true,
       ...(buttons ? { buttons } : {}),
     });
+    if (!shown) continue;
+    raised.push(item.id);
 
     // Remember what this notification is about, so a click or a button press
     // knows which action to answer and where to send the person.
@@ -152,6 +170,62 @@ async function pullNotifications() {
       },
     });
   }
+
+  if (raised.length > 0) {
+    try {
+      await fetch(`${endpoint}/x/notifications`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ raised }),
+      });
+      await note({ lastShownAt: Date.now(), lastShownCount: raised.length });
+    } catch (error) {
+      await note({ lastPullError: String(error) });
+    }
+  }
+}
+
+/**
+ * Raises one notification and says whether it really appeared. Chrome reports
+ * a refused notification through lastError rather than by throwing, so without
+ * this a blocked notification looks exactly like a delivered one.
+ */
+function show(id, options) {
+  return new Promise((resolve) => {
+    try {
+      chrome.notifications.create(id, options, () => {
+        const failure = chrome.runtime.lastError;
+        if (failure) {
+          void note({ lastNotifyError: failure.message ?? "refused" });
+          resolve(false);
+          return;
+        }
+        resolve(true);
+      });
+    } catch (error) {
+      void note({ lastNotifyError: String(error) });
+      resolve(false);
+    }
+  });
+}
+
+/** What Chrome and the operating system allow this extension to show. */
+function permissionLevel() {
+  return new Promise((resolve) => {
+    try {
+      chrome.notifications.getPermissionLevel((level) => resolve(level));
+    } catch {
+      resolve("unknown");
+    }
+  });
+}
+
+/** Records how the last drain went, so the panel can show it. */
+async function note(fields) {
+  await chrome.storage.local.set(fields);
 }
 
 /** Answers one waiting action. Returns what the server said. */
@@ -215,7 +289,27 @@ chrome.notifications.onClicked.addListener(async (id) => {
   await chrome.storage.local.remove(id);
 });
 
-chrome.alarms.create(FLUSH_ALARM, { periodInMinutes: 0.5 });
+/**
+ * Keeps the repeating alarm alive without restarting it.
+ *
+ * This worker is woken by ordinary browsing, and every wake re-runs this file.
+ * Creating the alarm again on each wake reset its countdown, so a person who
+ * changed tab more often than the period never reached it and the alarm never
+ * fired. Browsing events still went out, because the tab listeners send those
+ * directly, but nothing that waits on the alarm ever ran. It is created now
+ * only when it is missing.
+ */
+async function ensureAlarm() {
+  const existing = await chrome.alarms.get(FLUSH_ALARM);
+  if (existing === undefined) {
+    await chrome.alarms.create(FLUSH_ALARM, { periodInMinutes: 0.5 });
+  }
+}
+
+void ensureAlarm();
+chrome.runtime.onInstalled.addListener(() => void ensureAlarm());
+chrome.runtime.onStartup.addListener(() => void ensureAlarm());
+
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name !== FLUSH_ALARM) return;
   // Report the open page as it is read, so the dashboard moves while browsing.
@@ -230,7 +324,13 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
       occurredAt: snapshot.startedAt,
     });
   }
-  await flush();
+  // Each is tried on its own. A send that fails must not stop the person being
+  // told about an action that is waiting for them.
+  try {
+    await flush();
+  } catch (error) {
+    await note({ lastError: String(error) });
+  }
   await pullNotifications();
 });
 
