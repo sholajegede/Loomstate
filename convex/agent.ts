@@ -45,6 +45,18 @@ export const loopBrief = internalQuery({
     agentPauseReason: v.optional(v.string()),
     openStepKey: v.optional(v.string()),
     answeredStepKeys: v.array(v.string()),
+    // An action already drafted and waiting for the owner to decide. It is the
+    // loop's real next action, whatever the next step says, because the loop
+    // cannot move until somebody rules on it.
+    pending: v.optional(
+      v.object({
+        subject: v.string(),
+        body: v.string(),
+        reason: v.string(),
+        commitsMoney: v.boolean(),
+        reversible: v.boolean(),
+      }),
+    ),
     recentOutbound: v.array(
       v.object({ to: v.array(v.string()), subject: v.string(), body: v.string() }),
     ),
@@ -107,6 +119,14 @@ export const loopBrief = internalQuery({
       .order("desc")
       .take(12);
 
+    const waiting = (
+      await ctx.db
+        .query("approvals")
+        .withIndex("by_loop", (q) => q.eq("loopId", args.loopId))
+        .order("desc")
+        .take(10)
+    ).find((a) => a.status === "pending" && a.proposedByOwner !== true);
+
     return {
       workspaceId: loop.workspaceId,
       title: loop.title,
@@ -124,6 +144,16 @@ export const loopBrief = internalQuery({
       agentPauseReason: loop.agentPauseReason,
       openStepKey: loop.openStepKey,
       answeredStepKeys: loop.answeredStepKeys ?? [],
+      pending:
+        waiting === undefined
+          ? undefined
+          : {
+              subject: String(waiting.actionPayload?.subject ?? ""),
+              body: String(waiting.actionPayload?.body ?? ""),
+              reason: waiting.reason,
+              commitsMoney: waiting.commitsMoney,
+              reversible: waiting.reversible,
+            },
       recentOutbound: messages
         .filter((m) => m.direction === "outbound")
         .slice(0, 6)
@@ -1039,6 +1069,7 @@ function buildPrompt(
     nextStep: string;
     tier: string;
     sourceUrls: string[];
+    pending?: { subject: string; reason: string };
     diffs: {
       kind: string;
       summary: string;
@@ -1099,9 +1130,22 @@ function buildPrompt(
           "",
           "The person has asked to see the next outbound action on this loop, so",
           "that they can approve or reject it. Choose \"email\" and draft the message",
-          "this loop needs next, working from the next step above. Where the",
-          "evidence is thin, draft the email you would send once it is settled and",
-          "say in it what you are still missing.",
+          "this loop needs next.",
+          brief.pending === undefined
+            ? [
+                "Work from the next step above. Where the evidence is thin, draft",
+                "the email you would send once it is settled and say in it what you",
+                "are still missing.",
+              ].join("\n")
+            : [
+                "This loop already has one action waiting for a decision, and it is",
+                "the action to put in front of them again. Draft the same action in",
+                "your own words:",
+                `  subject: ${brief.pending.subject}`,
+                `  why: ${brief.pending.reason}`,
+                "Do not replace it with an easier question. If it commits money or",
+                "cannot be undone, say so, because it still does.",
+              ].join("\n"),
           "Classify its risk honestly. Do not soften it to get it sent: nothing is",
           "sent from this, and the person decides.",
         ].join("\n")
