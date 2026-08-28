@@ -18,8 +18,6 @@ set.**
 
 </div>
 
----
-
 ## What Loomstate is
 
 You start things on the web all day. You compare three laptops. You look at a
@@ -39,8 +37,6 @@ or cannot be undone stops and waits for you.
 
 ![The intent map](docs/screenshots/intent-map.png)
 
-*Every goal you started and never closed, with how alive each one still is.*
-
 ### What a loop is
 
 A loop is one goal you are part way through. "Buy a used road bike under 800
@@ -56,8 +52,6 @@ pounds" is a loop. "Cycling" is not.
 | Detected changes | Firecrawl re-reading those pages |
 | An agent and its authority | A grant, which expires and can be revoked |
 | Every email sent and received | AgentMail, in both directions |
-
----
 
 ## How it works
 
@@ -135,9 +129,6 @@ find one.
 
 ![A loop in detail](docs/screenshots/loop-detail.png)
 
-*One loop: its next step, its agent and authority, the pages under watch, and
-what changed on them.*
-
 ### 5. Govern
 
 Nothing is sent until three separate checks pass. Any one of them stops it.
@@ -157,9 +148,6 @@ browser notification the extension raises.
 
 ![The approval queue](docs/screenshots/approvals.png)
 
-*A gated action: the draft, the evidence behind it, and the passkey check it
-cannot pass without.*
-
 ### 7. Act
 
 On approval, or inside a grant that allows it, the agent sends real email from
@@ -176,10 +164,6 @@ the evidence behind it, the email, and the reply. You can read it as one history
 or one agent at a time.
 
 ![The audit review](docs/screenshots/audit-log.png)
-
-*Every action, the grant that allowed it, and the evidence behind it.*
-
----
 
 ## Architecture
 
@@ -225,8 +209,6 @@ then fans out to email and to the browser. Approving from the web app runs a
 passkey check first. Approving from the extension is allowed only when the
 action is not gated. Both paths then call one shared function, so the audit
 trail is identical either way.
-
----
 
 ## The governance model
 
@@ -332,8 +314,6 @@ authorised it, the Firecrawl evidence with before and after, the email, and the
 reply. Reading it is a first-class surface with two lenses: every agent as one
 history, or one agent's own history.
 
----
-
 ## Autonomy and reliability
 
 An agent that runs unattended has to be right about when **not** to act. Most of
@@ -386,8 +366,6 @@ is refused.
 - The send cap is checked immediately before the send, so nothing between the
   decision and the send can slip past it.
 
----
-
 ## The extension
 
 Manifest V3. It is both the sensor and a place to work from.
@@ -407,8 +385,6 @@ Permissions requested: `tabs`, `storage`, `alarms`, `notifications`,
 
 ![The extension panel](docs/screenshots/extension-panel.png)
 
-*Your loops and what needs you, beside whatever you are reading.*
-
 ### Pairing
 
 Loomstate issues a token once and stores only its SHA-256 hash, so the token
@@ -416,10 +392,6 @@ cannot be read back out of the database. The extension sends it as a bearer
 token. Stopping a browser in settings rejects it from the next request onward.
 
 ![An approval reaches you anywhere](docs/screenshots/extension-approval.png)
-
-*The agent needs a decision. You are on another site entirely.*
-
----
 
 ## The web app
 
@@ -436,10 +408,6 @@ token. Stopping a browser in settings rejects it from the next request onward.
 | **Setup** | First-run, resumable, skippable. |
 
 ![First-run setup](docs/screenshots/setup.png)
-
-*Three things, each showing what is actually true rather than what was clicked.*
-
----
 
 ## Chat
 
@@ -464,10 +432,6 @@ The chat reads. It cannot send, approve, or change anything.
 | **Voice** | Dictation into the box through the browser's own speech recognition. Input only. Hidden where the browser has no such API. |
 
 ![The chat](docs/screenshots/chat.png)
-
-*Grounded in records, with a line saying what it read.*
-
----
 
 ## Each sponsor, doing real work
 
@@ -533,8 +497,6 @@ webhook, land on the loop, settle the open question, and start the next run.
 Remove AgentMail and the agent can decide but never do. The loop stops at the
 edge of the browser.
 
----
-
 ## Data model
 
 Twenty tables of Loomstate's own, plus the tables Convex Auth brings. Every read
@@ -563,8 +525,6 @@ path has an index.
 | `siteAssets` | The built web app, served from the deployment. |
 | `blocklist` | Domains Loomstate must never store. |
 
----
-
 ## Tunables
 
 Every one of these is a named constant in the code, not a magic number.
@@ -591,8 +551,6 @@ Every one of these is a named constant in the code, not a magic number.
 | aliveness stalled | 25 | `convex/lib/aliveness.ts` | At or above this a loop is stalled |
 | `DEFAULT_CHAT_MODEL` | `gpt-5-mini` | `convex/lib/models.ts` | Model the chat answers with |
 | `MAX_TURNS_IN_PROMPT` | 8 | `convex/chat.ts` | Prior chat turns carried forward |
-
----
 
 ## Project structure
 
@@ -649,8 +607,6 @@ docs/screenshots/          images this README references
 hackathon.md               the build log, in order, including the bugs
 ```
 
----
-
 ## Tech stack
 
 | Layer | Choice |
@@ -664,8 +620,6 @@ hackathon.md               the build log, in order, including the bugs
 | Agent email | [AgentMail](https://agentmail.to) inboxes, sending, and Svix-signed webhooks |
 | Extension | Chrome Manifest V3, service worker and side panel |
 | Hosting | The Convex deployment serves the built app from its own file storage |
-
----
 
 ## Setup and running
 
@@ -721,8 +675,6 @@ npm run build
 SITE_UPLOAD_TOKEN=... npm run publish -- https://<deployment>.convex.site
 ```
 
----
-
 ## Security and privacy
 
 | Concern | How Loomstate handles it |
@@ -745,8 +697,6 @@ SITE_UPLOAD_TOKEN=... npm run publish -- https://<deployment>.convex.site
 | Drafted email and replies | AgentMail | To send and receive as the agent |
 | Anything on the block list | Nowhere | Stopped in the browser |
 
----
-
 ## What Loomstate does not do
 
 Stated plainly, because a system that hides its edges is worth less than one
@@ -768,8 +718,6 @@ that names them.
 - **Reconstruction spends your tokens.** Every sweep that finds new browsing
   costs against your own key.
 - **Chrome only.** The extension is Manifest V3 and untested elsewhere.
-
----
 
 The build log for the Convex All Gas Hackathon is in
 [hackathon.md](hackathon.md). It records what was built, in order, including the
