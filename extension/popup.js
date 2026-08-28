@@ -391,7 +391,6 @@ async function showNotifyState() {
     "lastShownCount",
     "lastNotifyError",
     "lastPullError",
-    "lastTestError",
   ]);
 
   // What the drain is actually doing, so nobody has to guess whether it runs.
@@ -413,8 +412,7 @@ async function showNotifyState() {
   $("notifyState").textContent = `${checked}${pulled}${raised}${permission}`;
 
   // The exact words Chrome used, never a summary of them.
-  const error =
-    stored.lastNotifyError || stored.lastPullError || stored.lastTestError || "";
+  const error = stored.lastNotifyError || stored.lastPullError || "";
   $("notifyError").textContent = error === "" ? "" : `Chrome said: ${error}`;
   $("notifyError").classList.toggle("hidden", error === "");
 
@@ -434,22 +432,6 @@ async function showNotifyState() {
   el.textContent = text;
   el.classList.toggle("hidden", text === "");
 }
-
-$("notifyTest").addEventListener("click", async () => {
-  $("notifyTest").disabled = true;
-  $("notifyTest").textContent = "Sending";
-  const result = await chrome.runtime.sendMessage({ type: "loomstate:test" });
-  $("notifyTest").disabled = false;
-  $("notifyTest").textContent = "Send a test notification";
-  if (result?.ok) {
-    setMessage(
-      "Chrome accepted the test. If no notification appeared, your computer is hiding it.",
-    );
-  } else {
-    setMessage(`Chrome refused the test: ${result?.error ?? "no reason given"}`, true);
-  }
-  await showNotifyState();
-});
 
 void showNotifyState();
 void load();

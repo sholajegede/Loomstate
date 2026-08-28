@@ -75,10 +75,29 @@ async function flush() {
   }
 }
 
+/**
+ * Checks for waiting actions as the person browses.
+ *
+ * The alarm covers a browser sitting still, but somebody moving between tabs
+ * should not wait out the period to hear that an action needs them. This runs
+ * off the same tab changes, and holds a floor so that moving quickly does not
+ * turn into a request per tab.
+ */
+const BROWSE_PULL_MS = 15000;
+let lastBrowsePull = 0;
+
+async function pullWhileBrowsing() {
+  const now = Date.now();
+  if (now - lastBrowsePull < BROWSE_PULL_MS) return;
+  lastBrowsePull = now;
+  await pullNotifications();
+}
+
 chrome.tabs.onActivated.addListener(async ({ tabId }) => {
   await closeCurrent(Date.now());
   const tab = await chrome.tabs.get(tabId).catch(() => null);
   if (tab?.url) await openPage(tab.url, tab.title);
+  void pullWhileBrowsing();
 });
 
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
@@ -89,6 +108,7 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
   }
   await closeCurrent(Date.now());
   await openPage(tab.url, tab.title);
+  void pullWhileBrowsing();
 });
 
 chrome.windows.onFocusChanged.addListener(async (windowId) => {
@@ -270,8 +290,6 @@ async function reportHealth(extra) {
     "lastShownCount",
     "lastNotifyError",
     "lastPullError",
-    "lastTestAt",
-    "lastTestError",
   ]);
   const alarm = await chrome.alarms.get(FLUSH_ALARM).catch(() => undefined);
   const body = {
@@ -286,8 +304,6 @@ async function reportHealth(extra) {
     lastRaisedAt: stored.lastShownAt,
     lastRaisedCount: stored.lastShownCount,
     lastError: stored.lastNotifyError || stored.lastPullError || "",
-    lastTestAt: stored.lastTestAt,
-    lastTestError: stored.lastTestError,
     ...(extra ?? {}),
   };
   try {
@@ -302,29 +318,6 @@ async function reportHealth(extra) {
   } catch {
     // Reporting is best effort. It must never break the drain.
   }
-}
-
-/**
- * Raises one fixed notification on demand, to separate the two halves of the
- * chain. If this appears, the browser can show notifications and the fault is
- * in what feeds them. If it does not, nothing Loomstate sends will appear.
- */
-async function testNotification() {
-  const permission = await permissionLevel();
-  await note({ permission });
-  const id = `${NOTIFY_PREFIX}test-${Date.now()}`;
-  const ok = await show(id, {
-    type: "basic",
-    iconUrl: chrome.runtime.getURL("icons/icon128.png"),
-    title: "Loomstate test",
-    message: "If you can read this, this browser can show Loomstate notifications.",
-    priority: 2,
-  });
-  const stored = await chrome.storage.local.get(["lastNotifyError"]);
-  const error = ok ? "" : stored.lastNotifyError || "refused with no reason given";
-  await note({ lastTestAt: Date.now(), lastTestError: error });
-  await reportHealth({ lastTestAt: Date.now(), lastTestError: error });
-  return { ok, permission, error };
 }
 
 /** Answers one waiting action. Returns what the server said. */
@@ -455,10 +448,6 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     void decide(message.approvalId, message.decision, message.note).then(
       sendResponse,
     );
-    return true;
-  }
-  if (message?.type === "loomstate:test") {
-    void testNotification().then(sendResponse);
     return true;
   }
   if (message?.type === "loomstate:health") {
