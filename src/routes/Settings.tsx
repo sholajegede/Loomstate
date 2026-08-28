@@ -58,6 +58,14 @@ export default function Settings() {
           <Keys data={settings.keys} />
           <Pairing />
           <Exclusions />
+
+          <p className="px-1 text-[11px] text-ink-400">
+            <Link to="/privacy" className="hover:text-thread">
+              Privacy policy
+            </Link>
+            . It says what Loomstate collects, who else sees it, and how to
+            remove it.
+          </p>
         </div>
       )}
     </Page>

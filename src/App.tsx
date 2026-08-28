@@ -22,6 +22,7 @@ import SignIn from "./routes/SignIn";
 import { LoopsSidebar } from "./components/LoopsSidebar";
 import AskLoomstate from "./routes/AskLoomstate";
 import Setup from "./routes/Setup";
+import Privacy from "./routes/Privacy";
 import { Loading } from "./components/Loading";
 
 const nav = [
@@ -34,6 +35,19 @@ const nav = [
 ];
 
 export default function App() {
+  const location = useLocation();
+
+  // Anyone may read the privacy policy, signed in or not. A policy you have to
+  // hold an account to read is no use to the person deciding whether to make
+  // one.
+  if (location.pathname === "/privacy") {
+    return (
+      <div className="h-full overflow-y-auto">
+        <Privacy />
+      </div>
+    );
+  }
+
   return (
     <>
       <AuthLoading>

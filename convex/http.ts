@@ -474,6 +474,7 @@ http.route({
 const PAGE_PATHS = [
   "/",
   "/setup",
+  "/privacy",
   "/ask",
   "/signal",
   "/approvals",
