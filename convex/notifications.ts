@@ -17,6 +17,30 @@ import { sendMessage } from "./lib/agentmail";
  * moment an approval is created, so neither depends on the app being open.
  */
 
+/**
+ * The front of the letter, short enough for a notification.
+ *
+ * A notification carries a line or two. It takes them from the letter itself so
+ * that what somebody reads on screen is the beginning of what they read in the
+ * email, rather than a second description of the same action written
+ * separately. The opening line is skipped because the title already says it,
+ * and everything from the link onward is left for the click to carry.
+ */
+function openingOf(lines: string[], max = 180): string {
+  const meaningful: string[] = [];
+  for (const line of lines.slice(1)) {
+    if (line.trim() === "") continue;
+    if (line.startsWith("Approve, edit, or reject it here:")) break;
+    meaningful.push(line.trim());
+  }
+
+  const text = meaningful.join(" ");
+  if (text.length <= max) return text;
+  const cut = text.slice(0, max - 1);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > max * 0.6 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
+}
+
 function appUrl(): string {
   const url = process.env.SITE_URL;
   if (url === undefined || url === "") return "";
@@ -246,12 +270,37 @@ export const announceApproval = internalAction({
       return { notified: false, detail: "This approval was already announced." };
     }
 
-    const link = `${appUrl()}/approvals`;
+    // Both channels open the same card, not just the same page.
+    const link = `${appUrl()}/approvals?approval=${args.approvalId}`;
     const stakes = claim.commitsMoney
       ? "It commits money."
       : !claim.reversible
         ? "It cannot be undone."
         : "It needs your decision before it goes.";
+
+    // The letter is written once and both channels are cut from it, so a
+    // notification and the email about the same action can never disagree.
+    const letter = {
+      subject: `Approval needed: ${claim.loopTitle}`.slice(0, 120),
+      lines: [
+        `Loomstate has an action waiting for you on the loop "${claim.loopTitle}".`,
+        "",
+        // The stakes lead, because a notification shows only its first line or
+        // two and what an action costs matters more than why it was chosen.
+        `Stakes: ${stakes}${claim.stepUpRequired ? " It also needs a fresh passkey check." : ""}`,
+        `Why: ${claim.reason}`,
+        "",
+        `The agent proposes to write to ${claim.to.join(", ") || "the contact on the listing"}:`,
+        "",
+        `Subject: ${claim.subject}`,
+        "",
+        claim.body,
+        "",
+        `Approve, edit, or reject it here: ${link}`,
+        "",
+        "Loomstate sends nothing on this loop until you decide.",
+      ],
+    };
 
     const channels: string[] = [];
 
@@ -261,8 +310,8 @@ export const announceApproval = internalAction({
         workspaceId: claim.workspaceId,
         approvalId: args.approvalId,
         loopId: claim.loopId,
-        title: `Approve: ${claim.loopTitle}`.slice(0, 90),
-        body: `${claim.subject} ${stakes}`.slice(0, 180),
+        title: letter.subject.slice(0, 90),
+        body: openingOf(letter.lines),
         url: link,
       });
       channels.push("a browser notification");
@@ -276,28 +325,11 @@ export const announceApproval = internalAction({
       key !== "" &&
       claim.ownerEmail !== undefined
     ) {
-      const lines = [
-        `Loomstate has an action waiting for you on the loop "${claim.loopTitle}".`,
-        "",
-        `Why: ${claim.reason}`,
-        `Stakes: ${stakes}${claim.stepUpRequired ? " It also needs a fresh passkey check." : ""}`,
-        "",
-        `The agent proposes to write to ${claim.to.join(", ") || "the contact on the listing"}:`,
-        "",
-        `Subject: ${claim.subject}`,
-        "",
-        claim.body,
-        "",
-        `Approve, edit, or reject it here: ${link}`,
-        "",
-        "Loomstate sends nothing on this loop until you decide.",
-      ];
-
       try {
         await sendMessage(key, claim.inboxId, {
           to: [claim.ownerEmail],
-          subject: `Approval needed: ${claim.loopTitle}`.slice(0, 120),
-          text: lines.join("\n"),
+          subject: letter.subject,
+          text: letter.lines.join("\n"),
         });
         channels.push("an email");
       } catch (caught) {
