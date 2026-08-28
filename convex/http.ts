@@ -112,14 +112,33 @@ http.route({
     const device = await ctx.runQuery(internal.ingest.deviceByTokenHash, auth);
     if (device === null) return json({ error: "Unknown or stopped device." }, 401);
 
+    // The extension reports back what the browser really showed. Marking a
+    // notification told the moment it was handed over would lose it whenever
+    // the browser refused to raise it, and the person would never hear about
+    // an action that is waiting for them.
+    let raised: string[] = [];
+    try {
+      const body = (await request.json()) as { raised?: unknown };
+      if (Array.isArray(body.raised)) {
+        raised = body.raised.filter((id): id is string => typeof id === "string");
+      }
+    } catch {
+      // A drain with no body is a plain read, which is what the first call is.
+    }
+    if (raised.length > 0) {
+      const confirmed = await ctx.runMutation(
+        internal.notifications.markDelivered,
+        {
+          ids: raised as Id<"notifications">[],
+          workspaceId: device.workspaceId,
+        },
+      );
+      return json({ appUrl: appOrigin(), confirmed, notifications: [] });
+    }
+
     const pending = await ctx.runQuery(internal.notifications.pendingFor, {
       workspaceId: device.workspaceId,
     });
-    if (pending.length > 0) {
-      await ctx.runMutation(internal.notifications.markDelivered, {
-        ids: pending.map((n) => n._id),
-      });
-    }
 
     return json({
       appUrl: appOrigin(),

@@ -226,6 +226,13 @@ async function load() {
   $("status").textContent = stored.paused === true ? "Paused" : "Capturing";
   $("status").classList.toggle("live", stored.paused !== true);
 
+  // Opening the panel is also a chance to raise anything waiting, so a person
+  // who opens it does not have to wait for the next alarm.
+  void chrome.runtime.sendMessage({ type: "loomstate:pull" }).then(
+    () => setTimeout(() => void showNotifyState(), 400),
+    () => {},
+  );
+
   const overview = await post("/x/overview", { numItems: 8 });
   if (overview === null) return;
 
@@ -365,4 +372,35 @@ $("loopPick").addEventListener("change", () => {
   $("loopName").classList.toggle("hidden", $("loopPick").value !== "");
 });
 
+/**
+ * Says plainly when a waiting action cannot reach the person.
+ *
+ * A browser notification that is refused looks exactly like one that worked,
+ * so without this the only sign is that nothing appears.
+ */
+async function showNotifyState() {
+  const version = chrome.runtime.getManifest().version;
+  const badge = $("build");
+  if (badge) badge.textContent = `v${version}`;
+
+  const stored = await chrome.storage.local.get([
+    "permission",
+    "lastNotifyError",
+    "lastPullError",
+  ]);
+  const el = $("notifyWarning");
+  let text = "";
+  if (stored.permission === "denied") {
+    text =
+      "This browser blocks Loomstate notifications. Turn them on for Chrome in your system settings to see a waiting action.";
+  } else if (stored.lastNotifyError) {
+    text = `Loomstate could not raise its last notification: ${stored.lastNotifyError}`;
+  } else if (stored.lastPullError) {
+    text = `Loomstate could not read waiting actions: ${stored.lastPullError}`;
+  }
+  el.textContent = text;
+  el.classList.toggle("hidden", text === "");
+}
+
+void showNotifyState();
 void load();

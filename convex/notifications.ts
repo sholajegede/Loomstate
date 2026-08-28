@@ -190,17 +190,25 @@ export const pendingFor = internalQuery({
 });
 
 export const markDelivered = internalMutation({
-  args: { ids: v.array(v.id("notifications")) },
-  returns: v.null(),
+  args: {
+    ids: v.array(v.id("notifications")),
+    // The ids come from the extension, so each row is checked against the
+    // workspace the device belongs to before it is touched.
+    workspaceId: v.id("workspaces"),
+  },
+  returns: v.number(),
   handler: async (ctx, args) => {
     const now = Date.now();
-    for (const id of args.ids) {
+    let marked = 0;
+    for (const id of args.ids.slice(0, 20)) {
       const row = await ctx.db.get(id);
-      if (row !== null && row.deliveredAt === undefined) {
-        await ctx.db.patch(id, { deliveredAt: now });
-      }
+      if (row === null) continue;
+      if (row.workspaceId !== args.workspaceId) continue;
+      if (row.deliveredAt !== undefined) continue;
+      await ctx.db.patch(id, { deliveredAt: now });
+      marked += 1;
     }
-    return null;
+    return marked;
   },
 });
 
