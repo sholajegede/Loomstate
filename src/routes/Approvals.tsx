@@ -147,6 +147,14 @@ function ApprovalCard({
         </div>
       </div>
 
+      {approval.proposedByOwner ? (
+        <p className="mt-3 rounded-lg border border-warp/40 bg-warp/5 px-3 py-2 text-xs text-ink-200">
+          You asked Loomstate to raise this action. It goes to{" "}
+          {approval.routedTo ?? "your own inbox"} rather than the loop's contact,
+          so approving it reaches nobody else.
+        </p>
+      ) : null}
+
       <div className="mt-4 rounded-lg border border-ink-800 bg-ink-950/60 p-4">
         <p className="text-[11px] text-ink-400">
           From {approval.agentAddress} to {(payload.to ?? []).join(", ")}

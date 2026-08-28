@@ -35,6 +35,8 @@ const approvalShape = v.object({
   status: v.string(),
   stepUpRequired: v.boolean(),
   stepUpConfirmedAt: v.optional(v.number()),
+  proposedByOwner: v.optional(v.boolean()),
+  routedTo: v.optional(v.string()),
   createdAt: v.number(),
   decidedAt: v.optional(v.number()),
 });
@@ -72,6 +74,8 @@ export const pending = query({
         status: row.status,
         stepUpRequired: row.stepUpRequired,
         stepUpConfirmedAt: row.stepUpConfirmedAt,
+        proposedByOwner: row.proposedByOwner,
+        routedTo: row.routedTo,
         createdAt: row.createdAt,
         decidedAt: row.decidedAt,
       });

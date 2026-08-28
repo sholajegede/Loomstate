@@ -345,6 +345,12 @@ export default defineSchema({
     editedPayload: v.optional(v.any()),
     // Stamped once, so an approval is announced exactly one time.
     notifiedAt: v.optional(v.number()),
+    // Raised because the owner asked for it again, rather than because the
+    // agent found something new. Shown on the card so nobody mistakes a
+    // rehearsal for the agent acting on its own.
+    proposedByOwner: v.optional(v.boolean()),
+    // Where the send goes when approved, when that is not the loop's contact.
+    routedTo: v.optional(v.string()),
     // What the person said when they decided, and where they decided it.
     decisionNote: v.optional(v.string()),
     decidedVia: v.optional(v.union(v.literal("web"), v.literal("extension"))),

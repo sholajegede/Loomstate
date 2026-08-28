@@ -198,6 +198,7 @@ function Manual({
   live: { _id: Id<"grants">; tier: string } | null;
 }) {
   const workLoop = useAction(api.agent.workLoopNow);
+  const propose = useAction(api.agent.proposeForApproval);
   const revoke = useMutation(api.grants.revoke);
   const setContact = useMutation(api.loops.setContact);
   const [open, setOpen] = useState(false);
@@ -213,6 +214,19 @@ function Manual({
       setNote(result.detail);
     } catch (error) {
       setNote(readableError(error, "The agent run failed."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function raiseForApproval() {
+    setBusy(true);
+    setNote(null);
+    try {
+      const result = await propose({ loopId: loop._id });
+      setNote(result.detail);
+    } catch (error) {
+      setNote(readableError(error, "Loomstate could not raise the action."));
     } finally {
       setBusy(false);
     }
@@ -236,6 +250,22 @@ function Manual({
           >
             {busy ? "The agent is working" : "Run the agent now"}
           </button>
+
+          <div>
+            <button
+              onClick={() => void raiseForApproval()}
+              disabled={busy}
+              className="w-full rounded-lg border border-ink-700 px-3 py-2 text-sm hover:bg-ink-800 disabled:opacity-50"
+            >
+              {busy ? "Loomstate is working" : "Propose this action for approval"}
+            </button>
+            <p className="mt-1 text-[11px] leading-relaxed text-ink-400">
+              Loomstate decides this loop's next action and puts it in the
+              approval queue, even when it has settled that step already. It
+              sends nothing. Approving writes to your own inbox, not to the
+              loop's contact.
+            </p>
+          </div>
 
           <div>
             <p className="text-[11px] text-ink-400">

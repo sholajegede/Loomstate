@@ -375,6 +375,8 @@ export const queueApproval = internalMutation({
     commitsMoney: v.boolean(),
     evidence: v.array(evidenceValidator),
     stepUpRequired: v.boolean(),
+    proposedByOwner: v.optional(v.boolean()),
+    routedTo: v.optional(v.string()),
   },
   returns: v.id("approvals"),
   handler: async (ctx, args) => {
@@ -393,6 +395,8 @@ export const queueApproval = internalMutation({
       evidence: args.evidence,
       status: "pending",
       stepUpRequired: args.stepUpRequired,
+      proposedByOwner: args.proposedByOwner,
+      routedTo: args.routedTo,
       createdAt: now,
     });
 
@@ -401,9 +405,13 @@ export const queueApproval = internalMutation({
       loopId: args.loopId,
       agentId: args.agentId,
       approvalId,
-      actorType: "agent",
-      action: "approval.request",
-      detail: `The agent asked for approval: ${args.reason}`,
+      actorType: args.proposedByOwner === true ? "user" : "agent",
+      action:
+        args.proposedByOwner === true ? "approval.reraise" : "approval.request",
+      detail:
+        args.proposedByOwner === true
+          ? `The owner asked Loomstate to put this action in front of them again, addressed to ${args.routedTo ?? "the owner"} rather than the loop's contact: ${args.reason}`
+          : `The agent asked for approval: ${args.reason}`,
       inputs: args.actionPayload,
       evidence: args.evidence,
       at: now,
@@ -515,6 +523,14 @@ export const workLoop = internalAction({
     ),
     recipientHint: v.optional(v.string()),
     instruction: v.optional(v.string()),
+    /**
+     * The owner asked Loomstate to put this loop's next action in front of
+     * them again. Step memory and the repeat guard are stepped over on
+     * purpose, and each one says so in the run and in the audit log. The
+     * action is never sent: it always goes to the approval queue, addressed
+     * to the owner rather than to the loop's real contact.
+     */
+    proposeOnly: v.optional(v.boolean()),
   },
   returns: v.object({
     outcome: v.string(),
@@ -544,7 +560,8 @@ export const workLoop = internalAction({
 
     // Nothing new has arrived since the agent last looked. Doing the work again
     // would only re-derive the same answer and send it a second time.
-    const manual = args.trigger === "manual";
+    const proposing = args.proposeOnly === true;
+    const manual = args.trigger === "manual" || proposing;
     const hasNewSignal =
       brief.lastSignalAt !== undefined &&
       (brief.lastWorkedAt === undefined || brief.lastSignalAt > brief.lastWorkedAt);
@@ -638,9 +655,17 @@ export const workLoop = internalAction({
         return { outcome: decision.action, detail: decision.reason };
       }
 
+      // A proposal is a rehearsal, so it is addressed to the owner and never
+      // to the loop's real contact. Approving it sends to the owner's own
+      // inbox, which is what makes it safe to raise one during a demo.
+      const testRecipient = proposing
+        ? (args.recipientHint ?? brief.ownerEmail ?? null)
+        : null;
+
       // Where to write comes from the page Firecrawl already read. The manual
       // hint is an escape hatch, never the normal path.
       const recipient =
+        testRecipient ??
         brief.contactEmail ??
         args.recipientHint ??
         (decision.recipient !== null && decision.recipient.includes("@")
@@ -670,7 +695,14 @@ export const workLoop = internalAction({
       // The other side already answered this exact question. Asking again in
       // fresh words is the failure this guard exists to stop.
       const stepKey = stepKeyOf(decision.stepKey ?? decision.subject);
-      if (stepKey !== "" && brief.answeredStepKeys.includes(stepKey)) {
+      if (proposing && stepKey !== "" && brief.answeredStepKeys.includes(stepKey)) {
+        await ctx.runMutation(internal.agent.addStep, {
+          runId,
+          label: "The owner asked to see this step again.",
+          detail: `"${stepKey}" was already answered. Loomstate raises it anyway because the owner asked, and sends nothing.`,
+        });
+      }
+      if (!proposing && stepKey !== "" && brief.answeredStepKeys.includes(stepKey)) {
         const detail = `The seller already answered "${stepKey}". The agent sent nothing.`;
         await ctx.runMutation(internal.agent.addStep, {
           runId,
@@ -688,11 +720,27 @@ export const workLoop = internalAction({
       // Even with a new step name, near-identical wording to something already
       // sent to this address is a resend.
       const draft = `${decision.subject} ${decision.body}`;
-      const echo = brief.recentOutbound.find(
+      const echo = proposing
+        ? undefined
+        : brief.recentOutbound.find(
         (m) =>
           m.to.some((address) => address.includes(recipient)) &&
-          isResend(`${m.subject} ${m.body}`, draft),
-      );
+            isResend(`${m.subject} ${m.body}`, draft),
+          );
+      if (proposing) {
+        const repeated = brief.recentOutbound.some(
+          (m) =>
+            m.to.some((address) => address.includes(recipient)) &&
+            isResend(`${m.subject} ${m.body}`, draft),
+        );
+        if (repeated) {
+          await ctx.runMutation(internal.agent.addStep, {
+            runId,
+            label: "The owner asked to see a message like one already sent.",
+            detail: "Loomstate raises it anyway because the owner asked, and sends nothing.",
+          });
+        }
+      }
       if (echo !== undefined) {
         const detail =
           "The agent already sent this message to this address. It sent nothing.";
@@ -716,6 +764,7 @@ export const workLoop = internalAction({
         !decision.reversible ||
         decision.riskLevel === "high";
       const canSendItself =
+        !proposing &&
         grant !== null &&
         grant.tier === "act" &&
         grant.allowedActions.includes("email.ask") &&
@@ -742,10 +791,16 @@ export const workLoop = internalAction({
             commitsMoney: decision.commitsMoney,
             evidence,
             stepUpRequired: mustAsk,
+            proposedByOwner: proposing,
+            routedTo: proposing ? recipient : undefined,
           },
         );
 
-        const detail = mustAsk
+        const detail = proposing
+          ? mustAsk
+            ? `Loomstate raised this action for you. It commits money or cannot be undone, so it needs your approval and a passkey check. Approving sends to ${recipient}, not to the loop's contact.`
+            : `Loomstate raised this action for you. Approving sends to ${recipient}, not to the loop's contact.`
+          : mustAsk
           ? "This action commits money or cannot be undone. It needs your approval and a step-up confirmation."
           : grant === null
             ? "The agent has no grant on this loop, so the email waits for your approval."
@@ -858,6 +913,51 @@ export const workLoopNow = action({
       trigger: "manual",
       recipientHint: args.recipient,
       instruction: args.instruction,
+    });
+  },
+});
+
+/**
+ * Puts this loop's next action in front of the owner again, as a fresh
+ * approval.
+ *
+ * It runs the same path the agent runs: the same decision, the same risk
+ * classifier, the same approval record, the same notification. What differs is
+ * that nothing is sent, and that approving it writes to the owner's own inbox
+ * rather than to the loop's contact.
+ *
+ * Step memory and the repeat guard are stepped over on purpose, because the
+ * point is to raise something the agent has already settled. Each one it steps
+ * over says so in the run and in the audit log, so a rehearsal never reads as
+ * the agent acting on its own.
+ */
+export const proposeForApproval = action({
+  args: { loopId: v.id("loops"), recipient: v.optional(v.string()) },
+  returns: v.object({
+    outcome: v.string(),
+    detail: v.string(),
+    approvalId: v.optional(v.id("approvals")),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    outcome: string;
+    detail: string;
+    approvalId?: Id<"approvals">;
+  }> => {
+    const userId = await getAuthUserId(ctx);
+    if (userId === null) throw new Error("Not signed in.");
+    await ctx.runQuery(internal.agent.assertLoopAccess, { loopId: args.loopId });
+
+    return await ctx.runAction(internal.agent.workLoop, {
+      loopId: args.loopId,
+      trigger: "manual",
+      proposeOnly: true,
+      recipientHint:
+        args.recipient !== undefined && args.recipient.trim() !== ""
+          ? args.recipient.trim()
+          : undefined,
     });
   },
 });
