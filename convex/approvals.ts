@@ -187,6 +187,16 @@ export const reject = mutation({
       detail: "The owner rejected this action.",
       at: now,
     });
+    // The loop was waiting on this decision, and it has one. Leaving it waiting
+    // would have the loop claim a pending decision that nobody still owes.
+    if (approval.proposedByOwner !== true) {
+      const loop = await ctx.db.get(approval.loopId);
+      if (loop !== null && loop.nextStep.startsWith("Decide on the email")) {
+        await ctx.db.patch(approval.loopId, {
+          nextStep: "Decide how to reach the other side, after rejecting the drafted email.",
+        });
+      }
+    }
     return null;
   },
 });
@@ -206,6 +216,8 @@ export const readForSend = internalQuery({
       stepUpConfirmedAt: v.optional(v.number()),
       evidence: v.array(evidenceValidator),
       payload: v.any(),
+      followUpStep: v.optional(v.string()),
+      stepKey: v.optional(v.string()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -224,6 +236,8 @@ export const readForSend = internalQuery({
       stepUpConfirmedAt: approval.stepUpConfirmedAt,
       evidence: approval.evidence,
       payload: approval.editedPayload ?? approval.actionPayload,
+      followUpStep: approval.followUpStep,
+      stepKey: approval.stepKey,
     };
   },
 });
@@ -364,6 +378,22 @@ export const execute = internalAction({
       approvalId: args.approvalId as Id<"approvals">,
       evidence: approval.evidence,
     });
+
+    // The email has left, so the loop moves on and the step counts as asked.
+    // Without this the loop would sit on a question it has already put, and the
+    // guard that stops the agent asking twice would never see it.
+    if (approval.stepKey !== undefined) {
+      await ctx.runMutation(internal.agent.openStep, {
+        loopId: approval.loopId,
+        stepKey: approval.stepKey,
+      });
+    }
+    if (approval.followUpStep !== undefined) {
+      await ctx.runMutation(internal.agent.setNextStep, {
+        loopId: approval.loopId,
+        nextStep: approval.followUpStep,
+      });
+    }
 
     return {
       ok: true,

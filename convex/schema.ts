@@ -351,6 +351,12 @@ export default defineSchema({
     proposedByOwner: v.optional(v.boolean()),
     // Where the send goes when approved, when that is not the loop's contact.
     routedTo: v.optional(v.string()),
+    // What the loop moves on to once this action has really happened, and the
+    // step it answers. Both are held here rather than written when the agent
+    // decides, because an action waiting for approval has not happened yet and
+    // may never happen.
+    followUpStep: v.optional(v.string()),
+    stepKey: v.optional(v.string()),
     // What the person said when they decided, and where they decided it.
     decisionNote: v.optional(v.string()),
     decidedVia: v.optional(v.union(v.literal("web"), v.literal("extension"))),

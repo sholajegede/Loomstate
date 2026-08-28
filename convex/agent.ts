@@ -377,6 +377,8 @@ export const queueApproval = internalMutation({
     stepUpRequired: v.boolean(),
     proposedByOwner: v.optional(v.boolean()),
     routedTo: v.optional(v.string()),
+    followUpStep: v.optional(v.string()),
+    stepKey: v.optional(v.string()),
   },
   returns: v.id("approvals"),
   handler: async (ctx, args) => {
@@ -397,6 +399,8 @@ export const queueApproval = internalMutation({
       stepUpRequired: args.stepUpRequired,
       proposedByOwner: args.proposedByOwner,
       routedTo: args.routedTo,
+      followUpStep: args.followUpStep,
+      stepKey: args.stepKey,
       createdAt: now,
     });
 
@@ -608,8 +612,19 @@ export const workLoop = internalAction({
             : `The agent read its grant: ${grant.tier} tier, ${grant.allowedActions.length} allowed actions.`,
       });
 
+      // When proposing, the draft is addressed to the owner, so the model must
+      // know that before it writes rather than after.
+      const testRecipientForPrompt = proposing
+        ? (args.recipientHint ?? brief.ownerEmail ?? undefined)
+        : undefined;
+
       const apiKey = await resolveOpenAiKey(ctx, brief.workspaceId);
-      const prompt = buildPrompt(brief, args.recipientHint, args.instruction);
+      const prompt = buildPrompt(
+        brief,
+        testRecipientForPrompt ?? args.recipientHint,
+        args.instruction,
+        proposing,
+      );
 
       const { value: decision } = await askForJson<Decision>(apiKey, {
         system: DECIDE_SYSTEM,
@@ -623,10 +638,16 @@ export const workLoop = internalAction({
         label: `The agent chose to ${decision.action}.`,
         detail: decision.reason,
       });
-      await ctx.runMutation(internal.agent.setNextStep, {
-        loopId: args.loopId,
-        nextStep: decision.nextStep,
-      });
+      // Where the loop goes next depends on what actually happens, not on what
+      // the agent decided to try. An email that waits for approval has not been
+      // sent, and may never be, so the loop must not move past it here. Only a
+      // decision that finishes inside this run can advance the loop now.
+      if (decision.action !== "email") {
+        await ctx.runMutation(internal.agent.setNextStep, {
+          loopId: args.loopId,
+          nextStep: decision.nextStep,
+        });
+      }
 
       const evidence = brief.diffs.slice(0, 3).map((d) => ({
         watchId: d.watchId,
@@ -637,6 +658,16 @@ export const workLoop = internalAction({
         after: d.after,
         observedAt: d.detectedAt,
       }));
+
+      if (decision.action !== "email" && proposing) {
+        const detail = `Loomstate has no outbound action to raise on this loop. It says: ${decision.reason}`;
+        await ctx.runMutation(internal.agent.finishRun, {
+          runId,
+          status: "done",
+          outcome: detail,
+        });
+        return { outcome: decision.action, detail };
+      }
 
       if (decision.action !== "email") {
         await ctx.runMutation(internal.agent.noteInAudit, {
@@ -793,8 +824,23 @@ export const workLoop = internalAction({
             stepUpRequired: mustAsk,
             proposedByOwner: proposing,
             routedTo: proposing ? recipient : undefined,
+            // Carried so the loop can move on the moment this is approved and
+            // sent. A rehearsal the owner asked for carries nothing, because it
+            // goes to the owner rather than to the loop's contact, and must not
+            // move the real loop.
+            followUpStep: proposing ? undefined : decision.nextStep,
+            stepKey: proposing || stepKey === "" ? undefined : stepKey,
           },
         );
+
+        // The loop is now waiting on a person, and says so. This is the honest
+        // state: the action exists, and nobody has decided on it yet.
+        if (!proposing) {
+          await ctx.runMutation(internal.agent.setNextStep, {
+            loopId: args.loopId,
+            nextStep: `Decide on the email Loomstate has drafted for ${recipient}.`,
+          });
+        }
 
         const detail = proposing
           ? mustAsk
@@ -863,6 +909,11 @@ export const workLoop = internalAction({
       await ctx.runMutation(internal.agent.openStep, {
         loopId: args.loopId,
         stepKey,
+      });
+      // The email is gone, so now the loop really is past this step.
+      await ctx.runMutation(internal.agent.setNextStep, {
+        loopId: args.loopId,
+        nextStep: decision.nextStep,
       });
 
       const detail = `The agent emailed ${recipient} from ${agent.inboxAddress}.`;
@@ -1007,6 +1058,7 @@ function buildPrompt(
   },
   recipientHint: string | undefined,
   instruction: string | undefined,
+  proposing = false,
 ): string {
   const contact = brief.contactEmail ?? recipientHint;
   const contactSource = brief.contactSource;
@@ -1042,5 +1094,17 @@ function buildPrompt(
     instruction === undefined || instruction.trim() === ""
       ? ""
       : `\nWhat the person asked you to do: ${instruction.trim()}\nFollow this, and classify the risk of what it asks honestly.`,
+    proposing
+      ? [
+          "",
+          "The person has asked to see the next outbound action on this loop, so",
+          "that they can approve or reject it. Choose \"email\" and draft the message",
+          "this loop needs next, working from the next step above. Where the",
+          "evidence is thin, draft the email you would send once it is settled and",
+          "say in it what you are still missing.",
+          "Classify its risk honestly. Do not soften it to get it sent: nothing is",
+          "sent from this, and the person decides.",
+        ].join("\n")
+      : "",
   ].join("\n");
 }
