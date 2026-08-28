@@ -19,7 +19,11 @@ export const status = query({
   args: {},
   returns: v.object({
     hasKey: v.boolean(),
+    // A browser that has actually connected. Minting a token is not pairing:
+    // the extension may not even be installed yet.
     pairedBrowsers: v.number(),
+    // Tokens created that no extension has used yet.
+    tokensWaiting: v.number(),
     browserReporting: v.boolean(),
     defaultTier: v.string(),
     hasSignal: v.boolean(),
@@ -52,14 +56,16 @@ export const status = query({
       .take(1);
 
     const hasKey = secrets !== null;
-    // A workspace that already has what it needs is not interrupted, which
-    // matters for anyone who was using Loomstate before setup existed.
-    const alreadyWorking = hasKey && live.length > 0;
+    // Pairing means an extension reached Loomstate. A device row exists from
+    // the moment a token is made, and a token nobody has used pairs nothing.
+    const connected = live.filter((d) => d.lastSeenAt !== undefined);
+    const alreadyWorking = hasKey && connected.length > 0;
 
     return {
       hasKey,
-      pairedBrowsers: live.length,
-      browserReporting: live.some((d) => d.lastSeenAt !== undefined),
+      pairedBrowsers: connected.length,
+      tokensWaiting: live.length - connected.length,
+      browserReporting: connected.length > 0,
       defaultTier: workspace.defaultTier ?? "draft",
       hasSignal: signal.length > 0,
       doneAt: workspace.setupDoneAt,

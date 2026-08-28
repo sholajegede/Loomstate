@@ -64,7 +64,7 @@ export default function Setup() {
         <KeyStep hasKey={status.hasKey} />
         <BrowserStep
           paired={status.pairedBrowsers}
-          reporting={status.browserReporting}
+          waiting={status.tokensWaiting}
         />
         <TierStep current={status.defaultTier} />
       </div>
@@ -220,64 +220,86 @@ function KeyStep({ hasKey }: { hasKey: boolean }) {
 
 function BrowserStep({
   paired,
-  reporting,
+  waiting,
 }: {
   paired: number;
-  reporting: boolean;
+  waiting: number;
 }) {
   const pair = useAction(api.devices.pair);
   const [token, setToken] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Pairing is the extension reaching Loomstate, so this ticks only when a
+  // browser has really connected. A token that nobody has used yet pairs
+  // nothing, and saying otherwise hides the token the person still needs.
+  const connected = paired > 0;
 
   return (
     <Step
       index={2}
       title="Connect your browser"
       lede="A small extension tells Loomstate which pages you read, so it can work out what you are part way through. It blocks banking and health pages before anything leaves your machine."
-      done={paired > 0}
-      doneLabel={reporting ? "paired and reporting" : "paired"}
+      done={connected}
+      doneLabel="connected"
     >
-      {paired > 0 ? (
+      {connected ? (
         <p className="text-sm text-ink-300">
-          {reporting
-            ? "Your browser is sending pages to Loomstate."
-            : "Your browser is paired. It reports the first page you read for more than a few seconds."}
+          Your browser is connected and sending pages to Loomstate.
         </p>
       ) : (
         <>
-          <ol className="space-y-1.5 text-sm text-ink-300">
-            <li>1. Open chrome://extensions and turn on Developer mode.</li>
+          <p className="text-sm text-ink-300">
+            Install the extension first. It has to exist before there is
+            anything to pair.
+          </p>
+          <ol className="mt-3 space-y-1.5 text-sm text-ink-300">
             <li>
-              2. Select Load unpacked, then choose the extension folder from the
+              1. Open <code className="font-mono text-xs">chrome://extensions</code>{" "}
+              and turn on Developer mode.
+            </li>
+            <li>
+              2. Select Load unpacked, then choose the{" "}
+              <code className="font-mono text-xs">extension</code> folder from the
               Loomstate repository.
             </li>
-            <li>3. Create a token below and paste both values into the popup.</li>
+            <li>3. Create a token below, then open the Loomstate extension.</li>
+            <li>4. Paste the address and the token into it, and select Pair.</li>
           </ol>
 
-          <button
-            onClick={() => {
-              setBusy(true);
-              pair({ label: "This browser" })
-                .then((r) => setToken(r.token))
-                .finally(() => setBusy(false));
-            }}
-            disabled={busy}
-            className="mt-3 rounded-lg border border-ink-700 px-3.5 py-2 text-sm hover:bg-ink-800 disabled:opacity-40"
-          >
-            {busy ? "Creating" : "Create a pairing token"}
-          </button>
-
-          {token !== null ? (
+          {token === null ? (
+            <button
+              onClick={() => {
+                setBusy(true);
+                pair({ label: "This browser" })
+                  .then((r) => setToken(r.token))
+                  .finally(() => setBusy(false));
+              }}
+              disabled={busy}
+              className="mt-3 rounded-lg border border-ink-700 px-3.5 py-2 text-sm hover:bg-ink-800 disabled:opacity-40"
+            >
+              {busy ? "Creating" : "Create a pairing token"}
+            </button>
+          ) : (
             <div className="mt-3 rounded-lg border border-thread/30 bg-thread/5 p-3">
               <Copyable label="Loomstate address" value={SITE_URL} />
               <Copyable label="Pairing token" value={token} />
               <p className="mt-2 text-[11px] text-warp">
                 Copy the token now. Loomstate cannot show it again.
               </p>
-              <p className="mt-2 text-[11px] text-ink-400">
-                This step ticks itself the moment the extension pairs.
+              <p className="mt-2 flex items-center gap-2 text-[11px] text-ink-400">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-warp" />
+                Waiting for your browser to connect. This step ticks itself the
+                moment the extension pairs.
               </p>
             </div>
+          )}
+
+          {token === null && waiting > 0 ? (
+            <p className="mt-3 text-[11px] text-ink-400">
+              You made {waiting === 1 ? "a token" : `${waiting} tokens`} that no
+              browser has used. Loomstate cannot show a token again, so create a
+              new one and paste it into the extension.
+            </p>
           ) : null}
         </>
       )}
