@@ -139,10 +139,17 @@ http.route({
     const pending = await ctx.runQuery(internal.notifications.pendingFor, {
       workspaceId: device.workspaceId,
     });
+    // Retired without being shown, because the person already decided them.
+    if (pending.stale.length > 0) {
+      await ctx.runMutation(internal.notifications.markDelivered, {
+        ids: pending.stale,
+        workspaceId: device.workspaceId,
+      });
+    }
 
     return json({
       appUrl: appOrigin(),
-      notifications: pending.map((n) => ({
+      notifications: pending.show.map((n) => ({
         id: n._id,
         title: n.title,
         body: n.body,

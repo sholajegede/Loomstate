@@ -142,10 +142,18 @@ export const recordAnnouncement = internalMutation({
   },
 });
 
-/** Undelivered notifications for a workspace. The extension drains these. */
+/**
+ * Undelivered notifications for a workspace. The extension drains these.
+ *
+ * An action the person has already decided is not worth raising. Those are
+ * returned separately so the caller can retire them without showing them,
+ * rather than asking somebody to approve what they approved hours ago.
+ */
 export const pendingFor = internalQuery({
   args: { workspaceId: v.id("workspaces") },
-  returns: v.array(
+  returns: v.object({
+    stale: v.array(v.id("notifications")),
+    show: v.array(
     v.object({
       _id: v.id("notifications"),
       title: v.string(),
@@ -156,7 +164,8 @@ export const pendingFor = internalQuery({
       stepUpRequired: v.optional(v.boolean()),
       loopTitle: v.optional(v.string()),
     }),
-  ),
+    ),
+  }),
   handler: async (ctx, args) => {
     const rows = await ctx.db
       .query("notifications")
@@ -167,9 +176,16 @@ export const pendingFor = internalQuery({
     // The extension needs to know whether a notification can be answered from
     // the browser, and whether approving it needs the passkey.
     const out = [];
+    const stale = [];
     for (const r of rows) {
       const approval =
         r.approvalId === undefined ? null : await ctx.db.get(r.approvalId);
+      // The action behind this has already been decided, so raising it now
+      // would ask for a decision that has been made.
+      if (r.approvalId !== undefined && approval?.status !== "pending") {
+        stale.push(r._id);
+        continue;
+      }
       const loop = r.loopId === undefined ? null : await ctx.db.get(r.loopId);
       out.push({
         _id: r._id,
@@ -185,7 +201,7 @@ export const pendingFor = internalQuery({
         loopTitle: loop?.title,
       });
     }
-    return out;
+    return { show: out, stale };
   },
 });
 
