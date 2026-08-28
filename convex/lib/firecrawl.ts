@@ -108,7 +108,10 @@ export function normalize(markdown: string): string {
 
 /** The money in a price string, separated from the words around it. */
 export type ParsedPrice = {
-  /** Every amount stated, in order. A range states two. */
+  /**
+   * The distinct amounts stated, smallest first. Distinct, because a page that
+   * prints its price twice states one price, not two. A range states two.
+   */
   amounts: number[];
   /** The currency, when the string names one. */
   currency: string | null;
@@ -156,19 +159,37 @@ function toAmount(token: string): number | null {
   return Number.isFinite(value) ? value : null;
 }
 
+/** A number written beside a currency, which is what makes it a price. */
+const PRICED =
+  /(?:[₦$£€¥₹₽₩]|\b(?:NGN|USD|GBP|EUR|JPY|INR|RUB|KRW|BRL|CAD|AUD|CHF|CNY|ZAR|GHS|KES)\b)\s*(\d[\d.,\s]*\d|\d)|(\d[\d.,\s]*\d|\d)\s*(?:[₦$£€¥₹₽₩]|\b(?:NGN|USD|GBP|EUR|JPY|INR|RUB|KRW|BRL|CAD|AUD|CHF|CNY|ZAR|GHS|KES)\b)/g;
+
+/** Dates and clock times are not prices. */
+const TIMESTAMPS =
+  /\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?Z?)?/g;
+
 /** Pulls the money out of a price string. Returns null when it states none. */
 export function parsePrice(value: string | undefined): ParsedPrice | null {
   if (value === undefined || value.trim() === "") return null;
-  const text = value.replace(/\u00a0/g, " ");
+  const text = value.replace(/\u00a0/g, " ").replace(TIMESTAMPS, " ");
 
-  const amounts: number[] = [];
-  for (const match of text.matchAll(/\d[\d.,\s]*\d|\d/g)) {
-    const amount = toAmount(match[0]);
-    // A year or a bare small number in prose is not a price on its own, but a
-    // zero is, so only drop what cannot be parsed.
-    if (amount !== null) amounts.push(amount);
+  // A number beside a currency is a price. Anything else in the string is the
+  // size, the quantity, or part of the product name.
+  const found = new Set<number>();
+  for (const match of text.matchAll(PRICED)) {
+    const token = match[1] ?? match[2];
+    const amount = token === undefined ? null : toAmount(token);
+    if (amount !== null) found.add(amount);
   }
-  if (amounts.length === 0) return null;
+
+  // A page that names no currency still names a price, so read every number.
+  if (found.size === 0) {
+    for (const match of text.matchAll(/\d[\d.,\s]*\d|\d/g)) {
+      const amount = toAmount(match[0]);
+      if (amount !== null) found.add(amount);
+    }
+  }
+  if (found.size === 0) return null;
+  const amounts = [...found].sort((x, y) => x - y);
 
   let currency: string | null = null;
   const code = text.match(CURRENCY_CODES);
