@@ -25,6 +25,10 @@ build/
 .next/
 out/
 extension/dist/
+extension/build/
+
+# Packaged extension, rebuilt with npm run build:extension
+*.zip
 
 # Convex local state
 .convex/
