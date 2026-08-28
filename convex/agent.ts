@@ -12,7 +12,7 @@ import { requireDocIn } from "./lib/access";
 import { askForJson } from "./lib/openai";
 import { sendMessage } from "./lib/agentmail";
 import { resolveOpenAiKey } from "./secrets";
-import { DUPLICATE_THRESHOLD, similarity, stepKeyOf } from "./lib/similarity";
+import { isResend, stepKeyOf } from "./lib/similarity";
 
 const evidenceValidator = v.object({
   watchId: v.optional(v.id("watches")),
@@ -691,7 +691,7 @@ export const workLoop = internalAction({
       const echo = brief.recentOutbound.find(
         (m) =>
           m.to.some((address) => address.includes(recipient)) &&
-          similarity(`${m.subject} ${m.body}`, draft) >= DUPLICATE_THRESHOLD,
+          isResend(`${m.subject} ${m.body}`, draft),
       );
       if (echo !== undefined) {
         const detail =
