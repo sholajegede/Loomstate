@@ -669,3 +669,30 @@ showed the token with a control to copy it and stayed open; it ticked itself to
 connected the moment the extension sent an event. A plain drain returned the
 waiting actions and marked none delivered; confirming two by id marked exactly
 those two; the four already decided were retired unshown.
+
+### 2026-08-28 - the notification Chrome accepted and the computer threw away
+
+The alarm fix worked. Every one of the thirteen waiting notifications went from
+undrained to confirmed, and Loomstate confirms one only after the browser has
+raised it without complaint. The drain ran, pulled the waiting actions, called
+Chrome, and Chrome said yes to all seven it was given. Nothing appeared on
+screen.
+
+That is the whole difficulty. A notification the browser accepts and the
+computer then hides looks identical, from every place the server can see, to one
+somebody read. Chrome reports a refusal through lastError; it has nothing to
+report when the operating system quietly drops what it was handed.
+
+So the browser now says what only it can see: the build it runs, whether
+notifications are allowed, when its alarm next fires, when it last drained and
+how many it pulled, how many it raised, and the exact words of any refusal. The
+panel shows the same, so the drain can be watched instead of guessed at, and
+carries a control that raises one fixed notification. That separates a browser
+that cannot show notifications at all from a drain that is not feeding it
+(`extension/background.js`, `extension/popup.js`, `convex/http.ts`,
+`convex/ingest.ts`).
+
+The fix for the person is not a notification at all. The toolbar icon now
+carries a count of what is waiting. Chrome draws that itself, so it stands
+whatever the computer decides to do with notifications, and an owner whose
+machine hides banners still sees that Loomstate needs them.
