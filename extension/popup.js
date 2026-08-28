@@ -416,19 +416,14 @@ async function showNotifyState() {
   $("notifyError").textContent = error === "" ? "" : `Chrome said: ${error}`;
   $("notifyError").classList.toggle("hidden", error === "");
 
+  // Only a refusal is worth a banner. A notification that went out says so on
+  // the line above, and repeating that as a warning turns working software into
+  // a standing complaint.
   const el = $("notifyWarning");
-  let text = "";
-  if (stored.permission === "denied") {
-    text =
-      "Chrome blocks notifications for this extension. Open chrome://settings/content/notifications and allow them.";
-  } else if (
-    stored.permission === "granted" &&
-    stored.lastShownCount > 0 &&
-    !error
-  ) {
-    text =
-      "Chrome accepted the last notification. If nothing appeared, your computer is hiding it: open System Settings, then Notifications, then Google Chrome, and turn notifications on.";
-  }
+  const text =
+    stored.permission === "denied"
+      ? "Chrome blocks notifications for this extension. Open chrome://settings/content/notifications and allow them."
+      : "";
   el.textContent = text;
   el.classList.toggle("hidden", text === "");
 }
