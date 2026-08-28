@@ -625,3 +625,47 @@ follow-on step parked on the approval. Approving a queued email sent it, moved
 the loop to that follow-on step, and marked the step asked. Raising the purchase
 by hand came back high risk, commits money, cannot undo, needs passkey, routed
 to the owner, with the re-raise and the notification both in the audit log.
+
+### 2026-08-28 - setup that made no sense, and notifications that never fired
+
+**Creating a token said the browser was paired.** Setup counted any device row
+as a paired browser, and a row exists from the moment a token is minted. So the
+step ticked the instant the token was made, and ticking it replaced the panel
+holding the token. A new owner never saw the token they had just created, and
+the extension they were meant to paste it into was not installed yet. Three
+tokens on the live workspace were made this way and never used.
+
+Pairing now means the extension has reached Loomstate. The step guides the
+install first, keeps the token on screen with a control to copy it, and says it
+is waiting for the browser. It ticks itself when the browser connects
+(`convex/setup.ts`, `src/routes/Setup.tsx`).
+
+**Browser notifications had never once fired.** Thirteen sat waiting on the live
+workspace, the oldest ten hours old, none drained. The cause was in the
+extension. The worker created its repeating alarm at the top of the file, and
+ordinary browsing re-runs that file. Creating an alarm under a name that already
+exists cancels the old one, so every tab change restarted the countdown. Anyone
+browsing more often than the period never reached it, and the alarm never fired.
+Browsing events hid this, because the tab listeners send those directly.
+Draining notifications had no other caller, so it never ran at all.
+
+The alarm is created now only when it is missing, and set again on install and
+on startup. The panel drains on open as well (`extension/background.js`,
+`extension/popup.js`).
+
+Two more faults sat behind it. The server marked a notification told the moment
+it handed it over, so an action counted as announced even when the browser
+refused to raise it, and nothing separated a notification somebody saw from one
+that never appeared. The extension now reports back only what the browser really
+raised, checked against the workspace the device belongs to, and Chrome's
+lastError is read and shown in the panel. And the drain ignored what had
+happened to the action behind each notification, so a backlog asked the owner to
+approve work they had approved hours before. Four of the eleven waiting were
+already decided. Those are retired now without being shown
+(`convex/http.ts`, `convex/notifications.ts`).
+
+Confirmed on the live deployment. With no browser connected, the setup step
+showed the token with a control to copy it and stayed open; it ticked itself to
+connected the moment the extension sent an event. A plain drain returned the
+waiting actions and marked none delivered; confirming two by id marked exactly
+those two; the four already decided were retired unshown.
