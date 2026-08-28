@@ -12,7 +12,7 @@
 - **Auth:** Convex Auth
 - **AI models:** gpt-5-mini by default, with gpt-4.1-mini and gpt-4o-mini as fallbacks. The chat model is chosen by the owner from what their own key reaches.
 - **Started:** 2026-08-26T21:21:20Z
-- **Last updated:** 2026-08-27T22:35:00Z
+- **Last updated:** 2026-08-28T02:00:00Z
 
 ## Log
 
@@ -549,3 +549,43 @@ Confirmed on the live deployment by reading back what the browser actually
 applied: four animations running, `loom-weave` over 1.8s with the rows offset
 by 0 and 0.2 and 0.4 seconds, and the dash offset sampled travelling the full
 distance from one side to the other and out again.
+
+### 2026-08-28 - two bugs in the loop-working path
+Both were found by reading the live audit log rather than by a test.
+
+**A relabelled price read as a price change.** The comparison normalised
+spacing and case but not the words around the number, so "₦65,000.00 NGN" and
+"Sale price₦65,000.00 NGN" were different prices. Every time the shop relabelled
+a field the loop recorded news, rose in aliveness, and woke the agent for
+nothing. Loomstate now reads what the price is rather than how it is written: it
+takes the numbers written beside a currency, normalises the separators, and
+compares the distinct amounts and the currency. A page that prints its price
+twice states one price. A range states two. Where a string names no amount at
+all, the old text comparison still applies, so an unreadable price is compared
+rather than quietly called unchanged.
+
+Fixing it surfaced a second case the first fix missed. The page began printing
+the figure twice, as "Sale price₦63,000.00 NGN (₦63,000.00)", and comparing the
+amounts as a sequence made one price look like two. Comparing the distinct
+amounts fixed it. Fifteen cases now pass, including European separators, a
+currency change at the same number, a range that moved, and a size in a product
+name (`convex/lib/firecrawl.ts`).
+
+**A different item read as a repeat.** The resend guard compared prose alone, so
+a message about a ₦167,000 bracelet looked like one already sent about a ₦65,000
+bracelet: same shop, same words, overlap above the bar. The agent refused work it
+had never done.
+
+Wording was the wrong signal. What separates two messages is what they are
+about, so Loomstate now reads the sums named beside a currency and the product
+pages named, ignoring the dates and timestamps every message carries. Different
+money or a different page means a different thing, whatever the prose says. Only
+when the two concern the same thing does word overlap decide, and the bar falls
+as that agreement rises, because agreeing on both the price and the page is
+itself evidence of a repeat (`convex/lib/similarity.ts`, `convex/agent.ts`).
+
+Confirmed on the live deployment. Ten watched pages were re-read and produced no
+price change at all, where the same pages had produced a false one on every
+sweep before. The exact message the guard had wrongly refused, a different
+bracelet at a different price to the same address, was sent. A reworded ask about
+that same bracelet at that same price was still refused.

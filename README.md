@@ -351,9 +351,16 @@ unanswered reply, or a loop never worked. Everything else is quiet.
 ### Near-duplicate detection
 
 Two messages that ask the same thing rarely match character for character, so
-Loomstate compares the meaningful words they share. Jaccard overlap at or above
-**0.6** against recent outbound email to the same address counts as a resend and
-is refused.
+Loomstate compares the meaningful words they share. Prose alone is not enough:
+two emails about two different bracelets from one shop share nearly all their
+vocabulary, and judged on wording a genuinely new offer looks like a resend.
+
+So Loomstate reads what a message is about before it reads how it is worded. It
+takes the sums of money named beside a currency, and the product pages named.
+Different money or a different page means a different thing, and the draft goes.
+Only when the two concern the same thing does word overlap decide, and the bar
+falls as that agreement rises: **0.4** when the price and the page both match,
+**0.5** when one does, **0.6** when the messages name neither.
 
 ### Failure containment
 
@@ -546,7 +553,9 @@ Every one of these is a named constant in the code, not a magic number.
 | `LOOP_HOURLY_CAP` | 3 | `convex/budget.ts` | Sends per loop per hour |
 | `LOOP_DAILY_CAP` | 8 | `convex/budget.ts` | Sends per loop per day |
 | `WORKSPACE_HOURLY_CAP` | 8 | `convex/budget.ts` | Sends per workspace per hour |
-| `DUPLICATE_THRESHOLD` | 0.6 | `convex/lib/similarity.ts` | Word overlap that counts as a resend |
+| `DUPLICATE_THRESHOLD` | 0.6 | `convex/lib/similarity.ts` | Word overlap that counts as a resend when neither message names a price or a page |
+| `PART_SUBJECT_THRESHOLD` | 0.5 | `convex/lib/similarity.ts` | The bar when the two agree on a price or a page |
+| `SAME_SUBJECT_THRESHOLD` | 0.4 | `convex/lib/similarity.ts` | The bar when they agree on both |
 | aliveness active | 55 | `convex/lib/aliveness.ts` | At or above this a loop is active |
 | aliveness stalled | 25 | `convex/lib/aliveness.ts` | At or above this a loop is stalled |
 | `DEFAULT_CHAT_MODEL` | `gpt-5-mini` | `convex/lib/models.ts` | Model the chat answers with |
