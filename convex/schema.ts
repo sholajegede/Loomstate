@@ -106,6 +106,25 @@ export default defineSchema({
     createdAt: v.number(),
     lastSeenAt: v.optional(v.number()),
     revokedAt: v.optional(v.number()),
+    // What the extension reports about itself: the build it runs, whether the
+    // browser lets it raise a notification, and how the last drain went. A
+    // notification that Chrome accepts and the operating system then hides
+    // looks like success everywhere else, so the browser has to say.
+    health: v.optional(
+      v.object({
+        version: v.optional(v.string()),
+        permission: v.optional(v.string()),
+        alarmInSeconds: v.optional(v.number()),
+        lastPullAt: v.optional(v.number()),
+        lastPullCount: v.optional(v.number()),
+        lastRaisedAt: v.optional(v.number()),
+        lastRaisedCount: v.optional(v.number()),
+        lastError: v.optional(v.string()),
+        lastTestAt: v.optional(v.number()),
+        lastTestError: v.optional(v.string()),
+      }),
+    ),
+    healthAt: v.optional(v.number()),
   })
     .index("by_workspace", ["workspaceId"])
     .index("by_token_hash", ["tokenHash"]),

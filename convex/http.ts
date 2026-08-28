@@ -46,6 +46,54 @@ http.route({ path: "/x/approvals", method: "OPTIONS", handler: preflight });
 http.route({ path: "/x/decide", method: "OPTIONS", handler: preflight });
 http.route({ path: "/x/overview", method: "OPTIONS", handler: preflight });
 http.route({ path: "/x/capture", method: "OPTIONS", handler: preflight });
+http.route({ path: "/x/health", method: "OPTIONS", handler: preflight });
+
+/**
+ * The extension reports what it can see from inside the browser: the build it
+ * runs, whether the browser lets it raise a notification, and how the last
+ * drain went. Chrome accepts a notification the operating system then hides, so
+ * without this the whole chain looks healthy while nothing reaches the person.
+ */
+http.route({
+  path: "/x/health",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const auth = await resolveDevice(request);
+    if (auth === null) return json({ error: "Missing device token." }, 401);
+
+    const device = await ctx.runQuery(internal.ingest.deviceByTokenHash, auth);
+    if (device === null) return json({ error: "Unknown or stopped device." }, 401);
+
+    let body: Record<string, unknown> = {};
+    try {
+      body = (await request.json()) as Record<string, unknown>;
+    } catch {
+      return json({ error: "Body must be JSON." }, 400);
+    }
+
+    const text = (key: string) =>
+      typeof body[key] === "string" ? (body[key] as string).slice(0, 300) : undefined;
+    const num = (key: string) =>
+      typeof body[key] === "number" ? (body[key] as number) : undefined;
+
+    await ctx.runMutation(internal.ingest.recordHealth, {
+      deviceId: device.deviceId,
+      health: {
+        version: text("version"),
+        permission: text("permission"),
+        alarmInSeconds: num("alarmInSeconds"),
+        lastPullAt: num("lastPullAt"),
+        lastPullCount: num("lastPullCount"),
+        lastRaisedAt: num("lastRaisedAt"),
+        lastRaisedCount: num("lastRaisedCount"),
+        lastError: text("lastError"),
+        lastTestAt: num("lastTestAt"),
+        lastTestError: text("lastTestError"),
+      },
+    });
+    return json({ ok: true });
+  }),
+});
 
 /** The extension posts browsing events here. */
 http.route({
@@ -147,8 +195,15 @@ http.route({
       });
     }
 
+    // The count of what still needs a person drives the toolbar badge, which
+    // Chrome draws itself and no operating system setting can hide.
+    const counts = await ctx.runQuery(internal.ingest.popupState, {
+      workspaceId: device.workspaceId,
+    });
+
     return json({
       appUrl: appOrigin(),
+      waitingOnYou: counts.pendingApprovals,
       notifications: pending.show.map((n) => ({
         id: n._id,
         title: n.title,

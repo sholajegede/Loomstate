@@ -134,3 +134,36 @@ export const popupState = internalQuery({
     return { activeLoops: loops.length, pendingApprovals: approvals.length };
   },
 });
+
+/**
+ * Records what the extension says about itself.
+ *
+ * A notification the browser accepts and the operating system then hides looks
+ * like a success from the server, so the only way to know is to have the
+ * browser report what it saw.
+ */
+export const recordHealth = internalMutation({
+  args: {
+    deviceId: v.id("devices"),
+    health: v.object({
+      version: v.optional(v.string()),
+      permission: v.optional(v.string()),
+      alarmInSeconds: v.optional(v.number()),
+      lastPullAt: v.optional(v.number()),
+      lastPullCount: v.optional(v.number()),
+      lastRaisedAt: v.optional(v.number()),
+      lastRaisedCount: v.optional(v.number()),
+      lastError: v.optional(v.string()),
+      lastTestAt: v.optional(v.number()),
+      lastTestError: v.optional(v.string()),
+    }),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.deviceId, {
+      health: args.health,
+      healthAt: Date.now(),
+    });
+    return null;
+  },
+});

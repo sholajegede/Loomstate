@@ -385,22 +385,71 @@ async function showNotifyState() {
 
   const stored = await chrome.storage.local.get([
     "permission",
+    "lastPullAt",
+    "lastPullCount",
+    "lastShownAt",
+    "lastShownCount",
     "lastNotifyError",
     "lastPullError",
+    "lastTestError",
   ]);
+
+  // What the drain is actually doing, so nobody has to guess whether it runs.
+  const checked =
+    stored.lastPullAt === undefined
+      ? "not checked yet"
+      : `checked ${timeAgo(stored.lastPullAt)}`;
+  const pulled =
+    stored.lastPullCount === undefined
+      ? ""
+      : `, ${stored.lastPullCount} waiting`;
+  const raised =
+    stored.lastShownCount === undefined
+      ? ""
+      : `, ${stored.lastShownCount} raised ${
+          stored.lastShownAt ? timeAgo(stored.lastShownAt) : ""
+        }`;
+  const permission = stored.permission ? `, permission ${stored.permission}` : "";
+  $("notifyState").textContent = `${checked}${pulled}${raised}${permission}`;
+
+  // The exact words Chrome used, never a summary of them.
+  const error =
+    stored.lastNotifyError || stored.lastPullError || stored.lastTestError || "";
+  $("notifyError").textContent = error === "" ? "" : `Chrome said: ${error}`;
+  $("notifyError").classList.toggle("hidden", error === "");
+
   const el = $("notifyWarning");
   let text = "";
   if (stored.permission === "denied") {
     text =
-      "This browser blocks Loomstate notifications. Turn them on for Chrome in your system settings to see a waiting action.";
-  } else if (stored.lastNotifyError) {
-    text = `Loomstate could not raise its last notification: ${stored.lastNotifyError}`;
-  } else if (stored.lastPullError) {
-    text = `Loomstate could not read waiting actions: ${stored.lastPullError}`;
+      "Chrome blocks notifications for this extension. Open chrome://settings/content/notifications and allow them.";
+  } else if (
+    stored.permission === "granted" &&
+    stored.lastShownCount > 0 &&
+    !error
+  ) {
+    text =
+      "Chrome accepted the last notification. If nothing appeared, your computer is hiding it: open System Settings, then Notifications, then Google Chrome, and turn notifications on.";
   }
   el.textContent = text;
   el.classList.toggle("hidden", text === "");
 }
+
+$("notifyTest").addEventListener("click", async () => {
+  $("notifyTest").disabled = true;
+  $("notifyTest").textContent = "Sending";
+  const result = await chrome.runtime.sendMessage({ type: "loomstate:test" });
+  $("notifyTest").disabled = false;
+  $("notifyTest").textContent = "Send a test notification";
+  if (result?.ok) {
+    setMessage(
+      "Chrome accepted the test. If no notification appeared, your computer is hiding it.",
+    );
+  } else {
+    setMessage(`Chrome refused the test: ${result?.error ?? "no reason given"}`, true);
+  }
+  await showNotifyState();
+});
 
 void showNotifyState();
 void load();

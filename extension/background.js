@@ -125,6 +125,13 @@ async function pullNotifications() {
   }
 
   const waiting = payload.notifications ?? [];
+  // The badge counts what still needs a person, not what is left to raise, so
+  // it keeps standing after a notification has been shown or hidden.
+  await badge(
+    typeof payload.waitingOnYou === "number"
+      ? payload.waitingOnYou
+      : waiting.length,
+  );
   await note({
     lastPullAt: Date.now(),
     lastPullCount: waiting.length,
@@ -186,6 +193,8 @@ async function pullNotifications() {
       await note({ lastPullError: String(error) });
     }
   }
+
+  await reportHealth();
 }
 
 /**
@@ -226,6 +235,96 @@ function permissionLevel() {
 /** Records how the last drain went, so the panel can show it. */
 async function note(fields) {
   await chrome.storage.local.set(fields);
+}
+
+/**
+ * Lights the toolbar icon when something is waiting.
+ *
+ * Chrome draws this itself, so it appears even where the operating system hides
+ * notifications. It is the one channel that cannot be silently swallowed.
+ */
+async function badge(count) {
+  try {
+    await chrome.action.setBadgeText({ text: count > 0 ? String(count) : "" });
+    await chrome.action.setBadgeBackgroundColor({ color: "#b4442e" });
+    await chrome.action.setTitle({
+      title:
+        count > 0
+          ? `Loomstate: ${count} action${count === 1 ? "" : "s"} waiting for you`
+          : "Loomstate",
+    });
+  } catch {
+    // An icon that cannot be drawn is not worth failing a drain over.
+  }
+}
+
+/** Tells Loomstate what this browser can actually see and do. */
+async function reportHealth(extra) {
+  const { endpoint, token } = await settings();
+  if (endpoint === "" || token === "") return;
+  const stored = await chrome.storage.local.get([
+    "permission",
+    "lastPullAt",
+    "lastPullCount",
+    "lastShownAt",
+    "lastShownCount",
+    "lastNotifyError",
+    "lastPullError",
+    "lastTestAt",
+    "lastTestError",
+  ]);
+  const alarm = await chrome.alarms.get(FLUSH_ALARM).catch(() => undefined);
+  const body = {
+    version: chrome.runtime.getManifest().version,
+    permission: stored.permission ?? (await permissionLevel()),
+    alarmInSeconds:
+      alarm === undefined
+        ? undefined
+        : Math.round((alarm.scheduledTime - Date.now()) / 1000),
+    lastPullAt: stored.lastPullAt,
+    lastPullCount: stored.lastPullCount,
+    lastRaisedAt: stored.lastShownAt,
+    lastRaisedCount: stored.lastShownCount,
+    lastError: stored.lastNotifyError || stored.lastPullError || "",
+    lastTestAt: stored.lastTestAt,
+    lastTestError: stored.lastTestError,
+    ...(extra ?? {}),
+  };
+  try {
+    await fetch(`${endpoint}/x/health`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    // Reporting is best effort. It must never break the drain.
+  }
+}
+
+/**
+ * Raises one fixed notification on demand, to separate the two halves of the
+ * chain. If this appears, the browser can show notifications and the fault is
+ * in what feeds them. If it does not, nothing Loomstate sends will appear.
+ */
+async function testNotification() {
+  const permission = await permissionLevel();
+  await note({ permission });
+  const id = `${NOTIFY_PREFIX}test-${Date.now()}`;
+  const ok = await show(id, {
+    type: "basic",
+    iconUrl: chrome.runtime.getURL("icons/icon128.png"),
+    title: "Loomstate test",
+    message: "If you can read this, this browser can show Loomstate notifications.",
+    priority: 2,
+  });
+  const stored = await chrome.storage.local.get(["lastNotifyError"]);
+  const error = ok ? "" : stored.lastNotifyError || "refused with no reason given";
+  await note({ lastTestAt: Date.now(), lastTestError: error });
+  await reportHealth({ lastTestAt: Date.now(), lastTestError: error });
+  return { ok, permission, error };
 }
 
 /** Answers one waiting action. Returns what the server said. */
@@ -307,8 +406,15 @@ async function ensureAlarm() {
 }
 
 void ensureAlarm();
-chrome.runtime.onInstalled.addListener(() => void ensureAlarm());
-chrome.runtime.onStartup.addListener(() => void ensureAlarm());
+void reportHealth();
+chrome.runtime.onInstalled.addListener(() => {
+  void ensureAlarm();
+  void reportHealth();
+});
+chrome.runtime.onStartup.addListener(() => {
+  void ensureAlarm();
+  void reportHealth();
+});
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name !== FLUSH_ALARM) return;
@@ -349,6 +455,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     void decide(message.approvalId, message.decision, message.note).then(
       sendResponse,
     );
+    return true;
+  }
+  if (message?.type === "loomstate:test") {
+    void testNotification().then(sendResponse);
+    return true;
+  }
+  if (message?.type === "loomstate:health") {
+    void reportHealth().then(() => sendResponse({ ok: true }));
     return true;
   }
   if (message?.type === "loomstate:pull") {
