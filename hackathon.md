@@ -589,3 +589,39 @@ price change at all, where the same pages had produced a false one on every
 sweep before. The exact message the guard had wrongly refused, a different
 bracelet at a different price to the same address, was sent. A reworded ask about
 that same bracelet at that same price was still refused.
+
+### 2026-08-28 - raising an action on demand, and a loop that lied
+
+Loomstate works loops on its own, which leaves no way to put a chosen action in
+front of a person on demand. A demo needs one. There is now a control on the
+loop that raises its next action as a fresh approval.
+
+It runs the same code the agent runs. The same model judges the risk, the same
+gate decides whether a passkey is needed, and the same notification goes out. It
+sends nothing itself. Approving one of these writes to the owner's own address
+rather than to the loop's contact, so a rehearsal never reaches a seller. Where
+the agent would normally stop, because the step is settled or the message
+repeats one already sent, it carries on and writes down that it did. The card
+says who asked for it and where it would go (`convex/agent.ts`,
+`src/components/AgentPanel.tsx`, `src/routes/Approvals.tsx`).
+
+Building it exposed a worse bug. The agent wrote the loop's next step the moment
+it decided what to do, before the risk gate ran. An email that stopped for
+approval still moved the loop past itself, so a loop waiting on an unapproved
+payment claimed it was waiting for the receipt. The money step looked settled
+and was never raised again. This is the reason the manual control was needed at
+all.
+
+The step a loop moves on to now rides on the approval and is applied when the
+send actually goes out. Approving also marks the step as asked, which it never
+did, so the guard against asking twice covers email the owner released and not
+only email the agent sent itself. Rejecting clears the wait rather than leaving
+the loop owed a decision nobody owes (`convex/agent.ts`, `convex/approvals.ts`,
+`convex/schema.ts`).
+
+Confirmed on the live deployment. A drafted purchase left the loop reading
+"decide on the email Loomstate has drafted", with the step unmarked and the
+follow-on step parked on the approval. Approving a queued email sent it, moved
+the loop to that follow-on step, and marked the step asked. Raising the purchase
+by hand came back high risk, commits money, cannot undo, needs passkey, routed
+to the owner, with the re-raise and the notification both in the audit log.
