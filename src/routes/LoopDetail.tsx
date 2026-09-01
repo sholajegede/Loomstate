@@ -39,7 +39,7 @@ export default function LoopDetail() {
     );
   }
 
-  const { loop, events } = data;
+  const { loop, events, workspacePaused } = data;
 
   return (
     <Page
@@ -107,7 +107,7 @@ export default function LoopDetail() {
         </div>
 
         <div className="min-w-0 space-y-4">
-          <AgentPanel loop={loop} />
+          <AgentPanel loop={loop} workspacePaused={workspacePaused} />
 
           <Card>
             <h2 className="text-sm font-medium">Keywords</h2>

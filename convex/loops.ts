@@ -193,6 +193,10 @@ export const get = query({
     v.null(),
     v.object({
       loop: loopShape,
+      // The owner can stop the agent for the whole workspace. A loop that
+      // reads as live while that switch is off is the one lie this page can
+      // tell, so the page is told.
+      workspacePaused: v.boolean(),
       events: v.array(
         v.object({
           _id: v.id("events"),
@@ -216,8 +220,11 @@ export const get = query({
       .order("desc")
       .take(50);
 
+    const workspace = await ctx.db.get(loop.workspaceId);
+
     return {
       loop: publicLoop(loop),
+      workspacePaused: workspace?.autopilot === false,
       events: events.map((e) => ({
         _id: e._id,
         url: e.url,

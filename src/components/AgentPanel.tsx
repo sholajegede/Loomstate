@@ -23,7 +23,13 @@ type Loop = {
  * is doing and why. The controls under "Manual controls" cover the cases the
  * agent cannot resolve by itself.
  */
-export function AgentPanel({ loop }: { loop: Loop }) {
+export function AgentPanel({
+  loop,
+  workspacePaused,
+}: {
+  loop: Loop;
+  workspacePaused: boolean;
+}) {
   const agent = useQuery(api.agents.forLoop, { loopId: loop._id });
   const grants = useQuery(api.grants.forLoop, { loopId: loop._id });
   const thread = useQuery(api.email.threadForLoop, { loopId: loop._id });
@@ -35,7 +41,11 @@ export function AgentPanel({ loop }: { loop: Loop }) {
       <Card>
         <h2 className="text-sm font-medium">Agent</h2>
 
-        <Status loop={loop} hasAgent={agent !== undefined && agent !== null} />
+        <Status
+          loop={loop}
+          hasAgent={agent !== undefined && agent !== null}
+          workspacePaused={workspacePaused}
+        />
 
         <dl className="mt-4 space-y-2.5">
           <Row label="Writes from">
@@ -133,9 +143,36 @@ export function AgentPanel({ loop }: { loop: Loop }) {
   );
 }
 
-function Status({ loop, hasAgent }: { loop: Loop; hasAgent: boolean }) {
+function Status({
+  loop,
+  hasAgent,
+  workspacePaused,
+}: {
+  loop: Loop;
+  hasAgent: boolean;
+  workspacePaused: boolean;
+}) {
   if (loop.agentPausedAt !== undefined) {
     return <PausedNotice loop={loop} />;
+  }
+  // The workspace switch stops every loop. Without this, the panel below
+  // reads as if the agent were about to work, and the owner waits for a run
+  // that can never start.
+  if (workspacePaused) {
+    return (
+      <div className="mt-2 rounded-lg border border-alarm/40 bg-alarm/5 px-3 py-2.5">
+        <p className="text-sm text-ink-100">
+          Loomstate is paused for this workspace. It captures browsing, but it
+          works no loop and raises no approval.
+        </p>
+        <Link
+          to="/settings"
+          className="mt-2 inline-block rounded-lg border border-ink-700 px-3 py-1.5 text-xs hover:bg-ink-800"
+        >
+          Start the agent again
+        </Link>
+      </div>
+    );
   }
   if (loop.blockedReason !== undefined) {
     return (
