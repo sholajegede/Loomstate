@@ -138,11 +138,15 @@ export const workDueLoops = internalAction({
           trigger: "schedule",
         });
       } catch (caught) {
-        console.log(
-          `work skipped ${loopId}: ${
-            caught instanceof Error ? caught.message : "unknown"
-          }`,
-        );
+        // A run that fails before it starts writes no agent run, so the
+        // failure would leave no trace anywhere the owner can see. Put the
+        // reason on the loop, which also writes it to the audit log.
+        const reason = caught instanceof Error ? caught.message : "unknown";
+        await ctx.runMutation(internal.agent.setBlocker, {
+          loopId,
+          reason: `Loomstate could not work this loop. ${reason}`.slice(0, 300),
+        });
+        console.log(`work skipped ${loopId}: ${reason}`);
       }
     }
 
