@@ -37,6 +37,23 @@ export const deviceByTokenHash = internalQuery({
 });
 
 /**
+ * Loomstate's own dashboard. Reading it is not browsing a goal, and its text
+ * lands in the loop the agent then writes about. A person reading their
+ * NextMVP loop must not turn that loop into a loop about Loomstate.
+ */
+function ownHosts(): string[] {
+  return [process.env.SITE_URL, process.env.CONVEX_SITE_URL]
+    .flatMap((raw) => {
+      if (raw === undefined || raw === "") return [];
+      try {
+        return [new URL(raw).hostname.replace(/^www\./, "").toLowerCase()];
+      } catch {
+        return [];
+      }
+    });
+}
+
+/**
  * Writes a batch of browsing events. The extension blocks excluded domains in
  * the browser. This second check makes sure nothing excluded is ever stored.
  */
@@ -53,6 +70,8 @@ export const recordEvents = internalMutation({
       .withIndex("by_workspace", (q) => q.eq("workspaceId", args.workspaceId))
       .collect();
 
+    const own = ownHosts();
+
     let accepted = 0;
     let rejected = 0;
     let newestAt = 0;
@@ -64,6 +83,10 @@ export const recordEvents = internalMutation({
         continue;
       }
       if (blocked.some((b) => matchesPattern(parsed.host, b.pattern))) {
+        rejected += 1;
+        continue;
+      }
+      if (own.includes(parsed.host)) {
         rejected += 1;
         continue;
       }
