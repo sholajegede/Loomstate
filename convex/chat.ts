@@ -68,7 +68,7 @@ export const loopContext = internalQuery({
     }
     if (loop.contactEmail !== undefined) {
       lines.push(
-        `The agent writes to ${loop.contactEmail}, read off ${loop.contactSource ?? "a watched page"}.`,
+        `Where the agent would write on this loop: ${loop.contactEmail}, read off ${loop.contactSource ?? "a watched page"}. This is a destination, not a record that anything was sent.`,
       );
     } else {
       lines.push("No contact address has been found for this loop.");
@@ -178,6 +178,11 @@ export const loopContext = internalQuery({
         lines.push(`  body: ${message.body.slice(0, 700)}`);
       }
       sources.push(count(messages.length, "email", "emails"));
+    } else {
+      lines.push("");
+      lines.push(
+        "EMAIL ON THIS LOOP: none. The agent has sent no email and received no reply on this loop.",
+      );
     }
 
     // Why an email went out, and under what authority.
@@ -195,6 +200,9 @@ export const loopContext = internalQuery({
         );
       }
       sources.push(count(runs.length, "agent run", "agent runs"));
+    } else {
+      lines.push("");
+      lines.push("AGENT RUNS ON THIS LOOP: none. The agent has never run on this loop.");
     }
 
     const approvals = await ctx.db
@@ -219,6 +227,11 @@ export const loopContext = internalQuery({
         );
       }
       sources.push(count(approvals.length, "approval", "approvals"));
+    } else {
+      lines.push("");
+      lines.push(
+        "APPROVALS ON THIS LOOP: none. Nothing on this loop is waiting in the approval queue.",
+      );
     }
 
     const audit = await ctx.db
@@ -499,6 +512,7 @@ You are given records Loomstate has already stored: the pages the person read, t
 Rules:
 - Ground every claim in a record you were given. Quote the specific price, address, subject line, date, or audit entry that supports it.
 - If the records do not show the answer, say so plainly. Never guess, and never fill a gap with something that sounds likely.
+- Never say the agent sent, wrote, or emailed anything unless an outbound email appears under EMAIL ON THIS LOOP. A contact address on the loop says where the agent would write, not that it wrote. A finished agent run does not mean an email left.
 - When asked why the agent did something, cite the run, the grant that allowed it, and the evidence behind it.
 - Be short. A few sentences, or a short list. No preamble.
 - Write plain English. Simple present tense where it fits. No hype.
