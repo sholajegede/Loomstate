@@ -190,3 +190,62 @@ export const recordHealth = internalMutation({
     return null;
   },
 });
+
+/**
+ * Clears signal Loomstate captured about itself before it stopped doing so.
+ * A loop built partly from the dashboard reads as a loop about Loomstate, and
+ * the agent then writes about Loomstate rather than about the goal. Safe to
+ * run more than once.
+ */
+export const dropOwnHostSignal = internalMutation({
+  args: {},
+  returns: v.object({
+    events: v.number(),
+    loops: v.number(),
+    watches: v.number(),
+  }),
+  handler: async (ctx) => {
+    const own = ownHosts();
+    if (own.length === 0) return { events: 0, loops: 0, watches: 0 };
+
+    const hostOf = (raw: string): string | null => {
+      try {
+        return new URL(raw).hostname.replace(/^www\./, "").toLowerCase();
+      } catch {
+        return null;
+      }
+    };
+
+    let removedEvents = 0;
+    for (const event of await ctx.db.query("events").take(2000)) {
+      if (!own.includes(event.host)) continue;
+      await ctx.db.delete(event._id);
+      removedEvents += 1;
+    }
+
+    let touchedLoops = 0;
+    for (const loop of await ctx.db.query("loops").take(500)) {
+      const kept = loop.sourceUrls.filter((raw) => {
+        const host = hostOf(raw);
+        return host === null || !own.includes(host);
+      });
+      if (kept.length === loop.sourceUrls.length) continue;
+      await ctx.db.patch(loop._id, { sourceUrls: kept });
+      touchedLoops += 1;
+    }
+
+    let removedWatches = 0;
+    for (const watch of await ctx.db.query("watches").take(500)) {
+      const host = hostOf(watch.url);
+      if (host === null || !own.includes(host)) continue;
+      await ctx.db.delete(watch._id);
+      removedWatches += 1;
+    }
+
+    return {
+      events: removedEvents,
+      loops: touchedLoops,
+      watches: removedWatches,
+    };
+  },
+});
