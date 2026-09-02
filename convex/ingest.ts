@@ -203,10 +203,11 @@ export const dropOwnHostSignal = internalMutation({
     events: v.number(),
     loops: v.number(),
     watches: v.number(),
+    diffs: v.number(),
   }),
   handler: async (ctx) => {
     const own = ownHosts();
-    if (own.length === 0) return { events: 0, loops: 0, watches: 0 };
+    if (own.length === 0) return { events: 0, loops: 0, watches: 0, diffs: 0 };
 
     const hostOf = (raw: string): string | null => {
       try {
@@ -242,10 +243,20 @@ export const dropOwnHostSignal = internalMutation({
       removedWatches += 1;
     }
 
+    // A change found on a page that is gone is still read as evidence, and it
+    // is the freshest thing the agent sees. It goes with the watch.
+    let removedDiffs = 0;
+    for (const diff of await ctx.db.query("diffs").take(2000)) {
+      if ((await ctx.db.get(diff.watchId)) !== null) continue;
+      await ctx.db.delete(diff._id);
+      removedDiffs += 1;
+    }
+
     return {
       events: removedEvents,
       loops: touchedLoops,
       watches: removedWatches,
+      diffs: removedDiffs,
     };
   },
 });
